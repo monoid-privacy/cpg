@@ -28,6 +28,7 @@ package de.fraunhofer.aisec.cpg.passes
 import de.fraunhofer.aisec.cpg.TranslationResult
 import de.fraunhofer.aisec.cpg.frontends.HasComplexCallResolution
 import de.fraunhofer.aisec.cpg.frontends.HasDefaultArguments
+import de.fraunhofer.aisec.cpg.frontends.HasNoClassScope
 import de.fraunhofer.aisec.cpg.frontends.HasTemplates
 import de.fraunhofer.aisec.cpg.frontends.cpp.CPPLanguage
 import de.fraunhofer.aisec.cpg.graph.HasType
@@ -43,6 +44,7 @@ import de.fraunhofer.aisec.cpg.passes.inference.inferFunction
 import de.fraunhofer.aisec.cpg.passes.inference.inferMethod
 import de.fraunhofer.aisec.cpg.passes.inference.startInference
 import de.fraunhofer.aisec.cpg.passes.order.DependsOn
+import de.fraunhofer.aisec.cpg.passes.scopes.NameScope
 import de.fraunhofer.aisec.cpg.processing.strategy.Strategy
 import java.util.*
 import java.util.regex.Pattern
@@ -79,6 +81,11 @@ open class CallResolver : SymbolResolverPass() {
 
     override fun accept(translationResult: TranslationResult) {
         scopeManager = translationResult.scopeManager
+
+        for (scope in scopeManager.filterScopes { s -> s is NameScope }) {
+            log.info("Scope: " + scope.scopedName)
+        }
+
         config = translationResult.config
 
         walker = ScopedWalker(scopeManager)
@@ -160,7 +167,11 @@ open class CallResolver : SymbolResolverPass() {
                 // resolve this call's signature, we need to make sure any call expression arguments
                 // are fully resolved
                 resolveArguments(node)
-                handleCallExpression(scopeManager.currentRecord, node)
+                if (node.language is HasNoClassScope) {
+                    handleCallExpression(null, node)
+                } else {
+                    handleCallExpression(scopeManager.currentRecord, node)
+                }
             }
         }
     }
@@ -176,6 +187,7 @@ open class CallResolver : SymbolResolverPass() {
 
         if (call is MemberCallExpression) {
             val member = call.member
+            log.info("cFQN: " + call.fqn)
             if (!(member is HasType && (member as HasType).type is FunctionPointerType)) {
                 // function pointers are handled by extra pass
                 handleMethodCall(curClass, call)
@@ -201,6 +213,7 @@ open class CallResolver : SymbolResolverPass() {
                 v.type is FunctionPointerType && v.name == call.name
             }
         if (!funcPointer.isPresent) {
+            log.info("Handling normal: " + call.fqn)
             // function pointers are handled by extra pass
             handleNormalCalls(curClass, call)
         }
@@ -226,6 +239,7 @@ open class CallResolver : SymbolResolverPass() {
     }
 
     protected open fun handleNormalCalls(curClass: RecordDeclaration?, call: CallExpression) {
+        log.info("Handle normal calls: " + (curClass?.name ?: "UNK"))
         if (curClass == null) {
             // Handle function (not method) calls
             // C++ allows function overloading. Make sure we have at least the same number of
@@ -242,6 +256,8 @@ open class CallResolver : SymbolResolverPass() {
                 val invocationCandidates = scopeManager.resolveFunction(call).toMutableList()
 
                 if (invocationCandidates.isEmpty()) {
+                    log.info("Registering dummies2 for: " + call.code + " " + call.name)
+
                     // If we have no candidates, we create an inferred FunctionDeclaration
                     invocationCandidates.add(currentTU.inferFunction(call))
                 }
@@ -284,6 +300,19 @@ open class CallResolver : SymbolResolverPass() {
                         .toMutableList()
             }
         }
+
+        log.info("Num methods: " + invocationCandidates.size)
+        if (invocationCandidates.size != 0) {
+            log.info(
+                "FFF: " +
+                    invocationCandidates[0].name +
+                    " " +
+                    invocationCandidates[0].isInferred +
+                    " " +
+                    invocationCandidates[0].code
+            )
+        }
+
         createMethodDummies(invocationCandidates, possibleContainingTypes, call)
         call.invokes = invocationCandidates
     }
@@ -322,6 +351,8 @@ open class CallResolver : SymbolResolverPass() {
         call: CallExpression
     ) {
         if (invocationCandidates.isEmpty()) {
+            log.info("Registering dummies for: " + call.name + " " + call.code)
+
             possibleContainingTypes
                 .mapNotNull {
                     var record = recordMap[it.root.typeName]
@@ -466,6 +497,7 @@ open class CallResolver : SymbolResolverPass() {
         if (node is MemberCallExpression) {
             val base = node.base!!
             possibleTypes.add(base.type)
+            log.info("T: " + base.type.typeName + " " + base.possibleSubTypes.size)
             possibleTypes.addAll(base.possibleSubTypes)
         } else if (node is StaticCallExpression) {
             if (node.targetRecord != null) {

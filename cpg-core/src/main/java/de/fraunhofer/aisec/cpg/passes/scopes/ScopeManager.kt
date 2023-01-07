@@ -692,7 +692,26 @@ class ScopeManager : ScopeProvider {
                 }
         }
 
-        return resolve(s) { it.name == call.name && it.hasSignature(call.signature) }
+        if (call.name.contains("AddFile")) {
+            LOGGER.info("Printing scope: " + call.name + " " + call.code)
+        }
+
+        val pred = { it: FunctionDeclaration ->
+            val hs = it.hasSignature(call.signature)
+
+            if (call.name.contains("AddFile")) {
+                LOGGER.info("ScopeName: " + it.name + " " + (it.body ?: "UNK") + " " + hs + " ")
+            }
+
+            it.name == call.name && hs
+        }
+
+        val res = resolve(s, false, pred)
+        if (call.name.contains("AddFile")) {
+            LOGGER.info("Res: " + res.size)
+        }
+
+        return res
     }
 
     fun resolveFunctionStopScopeTraversalOnDefinition(

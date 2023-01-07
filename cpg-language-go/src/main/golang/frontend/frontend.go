@@ -35,6 +35,7 @@ import (
 	"log"
 
 	"golang.org/x/mod/modfile"
+	"golang.org/x/tools/go/packages"
 	"tekao.net/jnigi"
 )
 
@@ -42,9 +43,11 @@ var env *jnigi.Env
 
 type GoLanguageFrontend struct {
 	*jnigi.ObjectRef
-	File       *ast.File
-	Module     *modfile.File
-	CommentMap ast.CommentMap
+	File             *ast.File
+	RelativeFilePath string
+	Module           *modfile.File
+	CommentMap       ast.CommentMap
+	Package          *packages.Package
 
 	CurrentTU *cpg.TranslationUnitDeclaration
 }

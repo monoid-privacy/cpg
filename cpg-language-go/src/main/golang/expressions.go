@@ -68,6 +68,8 @@ type UnaryOperator Expression
 type Literal Expression
 type DeclaredReferenceExpression Expression
 type KeyValueExpression Expression
+type TupleExpression Expression
+type DestructureTupleExpression Expression
 
 func (e *Expression) SetType(t *Type) {
 	(*HasType)(e).SetType(t)
@@ -220,4 +222,16 @@ func (k *KeyValueExpression) SetKey(e *Expression) {
 
 func (k *KeyValueExpression) SetValue(e *Expression) {
 	(*jnigi.ObjectRef)(k).CallMethod(env, "setValue", nil, (*jnigi.ObjectRef)(e).Cast(ExpressionClass))
+}
+
+func (t *TupleExpression) AddMember(e *Expression) {
+	(*jnigi.ObjectRef)(t).CallMethod(env, "addMember", nil, (*jnigi.ObjectRef)(e).Cast(ExpressionClass))
+}
+
+func (t *DestructureTupleExpression) SetTupleIndex(ix int) {
+	(*jnigi.ObjectRef)(t).CallMethod(env, "setTupleIndex", nil, NewInteger(ix))
+}
+
+func (t *DestructureTupleExpression) SetRefersTo(e *Expression) {
+	(*jnigi.ObjectRef)(t).CallMethod(env, "setRefersTo", nil, (*jnigi.ObjectRef)(e).Cast(ExpressionClass))
 }

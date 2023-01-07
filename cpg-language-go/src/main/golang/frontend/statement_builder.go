@@ -34,6 +34,10 @@ import (
 	"tekao.net/jnigi"
 )
 
+func (frontend *GoLanguageFrontend) NewForEachStatement(fset *token.FileSet, astNode ast.Node) *cpg.ForEachStatement {
+	return (*cpg.ForEachStatement)(frontend.NewStatement("ForEachStatement", fset, astNode))
+}
+
 func (frontend *GoLanguageFrontend) NewCompoundStatement(fset *token.FileSet, astNode ast.Node) *cpg.CompoundStatement {
 	return (*cpg.CompoundStatement)(frontend.NewStatement("CompoundStatement", fset, astNode))
 }

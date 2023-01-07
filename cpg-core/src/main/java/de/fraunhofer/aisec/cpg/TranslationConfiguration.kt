@@ -447,7 +447,7 @@ private constructor(
             registerPass(FunctionPointerCallResolver())
             registerPass(EvaluationOrderGraphPass()) // creates EOG
             registerPass(TypeResolver())
-            registerPass(ControlFlowSensitiveDFGPass())
+            // registerPass(ControlFlowSensitiveDFGPass())
             registerPass(FilenameMapper())
             return this
         }

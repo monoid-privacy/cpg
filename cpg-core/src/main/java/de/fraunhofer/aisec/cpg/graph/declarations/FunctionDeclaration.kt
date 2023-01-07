@@ -41,6 +41,7 @@ import java.util.*
 import java.util.stream.Collectors
 import org.apache.commons.lang3.builder.ToStringBuilder
 import org.neo4j.ogm.annotation.Relationship
+import org.slf4j.LoggerFactory
 
 /** Represents the declaration or definition of a function. */
 open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
@@ -121,11 +122,22 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
                 .stream()
                 .sorted(Comparator.comparingInt(ParamVariableDeclaration::argumentIndex))
                 .collect(Collectors.toList())
+
+        if (this.name.contains("AddFile")) {
+            LOGGER.info(
+                "signature: " + targetSignature.size + " " + signature.size + " " + this.name
+            )
+        }
+
         return if (targetSignature.size < signature.size) {
+            if (this.name.contains("AddFile")) {
+                LOGGER.info("returning early false")
+            }
             false
         } else {
             // signature is a collection of positional arguments, so the order must be preserved
             for (i in signature.indices) {
+
                 val declared = signature[i]
                 if (declared.isVariadic && targetSignature.size >= signature.size) {
                     // Everything that follows is collected by this param, so the signature is
@@ -134,12 +146,26 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
                     // with
                     // different vararg types, in C++ we can't, as vararg types are not defined here
                     // anyways)
+                    if (this.name.contains("AddFile")) {
+                        LOGGER.info("returning true")
+                    }
                     return true
                 }
                 val provided = targetSignature[i]
-                if (!TypeManager.getInstance().isSupertypeOf(declared.getType(), provided, this)) {
+                if (
+                    !TypeManager.getInstance().isSupertypeOf(declared.getType(), provided, this) &&
+                        declared.getType() !is UnknownType &&
+                        provided !is UnknownType
+                ) {
+                    if (this.name.contains("AddFile")) {
+                        LOGGER.info("returning false: " + provided + " " + declared.getType())
+                    }
                     return false
                 }
+            }
+
+            if (this.name.contains("AddFile")) {
+                LOGGER.info("returning: " + (targetSignature.size == signature.size))
             }
             // Longer target signatures are only allowed with varargs. If we reach this point, no
             // vararg has been encountered
@@ -270,5 +296,6 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
         const val BRACKET_LEFT = "("
         const val COMMA = ","
         const val BRACKET_RIGHT = ")"
+        private val LOGGER = LoggerFactory.getLogger(FunctionDeclaration::class.java)
     }
 }

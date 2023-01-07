@@ -328,7 +328,8 @@ public abstract class Type extends Node {
         // TODO(oxisto): convert FunctionPointerType to second order type
         || this instanceof FunctionPointerType
         || this instanceof IncompleteType
-        || this instanceof ParameterizedType;
+        || this instanceof ParameterizedType
+        || this instanceof TupleType;
   }
 
   /**

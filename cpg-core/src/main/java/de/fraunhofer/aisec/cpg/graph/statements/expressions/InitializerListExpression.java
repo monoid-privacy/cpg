@@ -41,9 +41,12 @@ import java.util.*;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.neo4j.ogm.annotation.Relationship;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** A list of initializer expressions. */
 public class InitializerListExpression extends Expression implements TypeListener {
+  private static final Logger LOGGER = LoggerFactory.getLogger(InitializerListExpression.class);
 
   /** The list of initializers. */
   @Relationship(value = "INITIALIZERS", direction = "OUTGOING")
@@ -88,6 +91,8 @@ public class InitializerListExpression extends Expression implements TypeListene
 
   @Override
   public void typeChanged(HasType src, List<HasType> root, Type oldType) {
+    LOGGER.info("updating type: " + src.getType().getTypeName());
+
     if (!TypeManager.isTypeSystemActive()) {
       return;
     }

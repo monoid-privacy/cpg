@@ -37,6 +37,7 @@ import de.fraunhofer.aisec.cpg.graph.edge.PropertyEdge.Companion.transformIntoOu
 import de.fraunhofer.aisec.cpg.graph.edge.PropertyEdge.Companion.unwrap
 import de.fraunhofer.aisec.cpg.graph.edge.PropertyEdgeDelegate
 import de.fraunhofer.aisec.cpg.graph.types.FunctionPointerType
+import de.fraunhofer.aisec.cpg.graph.types.TupleType
 import de.fraunhofer.aisec.cpg.graph.types.Type
 import de.fraunhofer.aisec.cpg.passes.CallResolver
 import de.fraunhofer.aisec.cpg.passes.VariableUsageResolver
@@ -268,8 +269,13 @@ open class CallExpression : Expression(), HasType.TypeListener, HasBase, Seconda
             val previous = type
             val types =
                 invokesRelationship.map(PropertyEdge<FunctionDeclaration>::end).mapNotNull {
-                    // TODO(oxisto): Support multiple return values
-                    it.returnTypes.firstOrNull()
+                    if (it.returnTypes.size == 0) {
+                        null
+                    } else if (it.returnTypes.size == 1) {
+                        it.returnTypes[0]
+                    } else {
+                        TupleType(it.returnTypes)
+                    }
                 }
             val alternative = if (types.isNotEmpty()) types[0] else null
             val commonType =

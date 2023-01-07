@@ -38,6 +38,7 @@ type SwitchStatement Statement
 type CaseStatement Statement
 type DefaultStatement Statement
 type ForStatement Statement
+type ForEachStatement Statement
 
 const StatementsPackage = GraphPackage + "/statements"
 const StatementClass = StatementsPackage + "/Statement"
@@ -49,6 +50,15 @@ func (f *CompoundStatement) AddStatement(s *Statement) {
 
 func (f *DeclarationStatement) SetSingleDeclaration(d *Declaration) {
 	(*jnigi.ObjectRef)(f).CallMethod(env, "setSingleDeclaration", nil, (*jnigi.ObjectRef)(d).Cast(DeclarationClass))
+}
+
+func (f *DeclarationStatement) SetDeclarations(decls []*Declaration) {
+	data := make([]*jnigi.ObjectRef, len(decls))
+	for i, d := range decls {
+		data[i] = (*jnigi.ObjectRef)(d).Cast(DeclarationClass)
+	}
+
+	(*jnigi.ObjectRef)(f).CallMethod(env, "setDeclarations", nil, data)
 }
 
 func (m *IfStatement) SetThenStatement(s *Statement) {
@@ -97,4 +107,16 @@ func (fw *ForStatement) SetIterationStatement(s *Statement) {
 
 func (r *ReturnStatement) SetReturnValue(e *Expression) {
 	(*jnigi.ObjectRef)(r).CallMethod(env, "setReturnValue", nil, (*jnigi.ObjectRef)(e).Cast(ExpressionClass))
+}
+
+func (f *ForEachStatement) SetVariable(s *Statement) {
+	(*jnigi.ObjectRef)(f).CallMethod(env, "setVariable", nil, (*jnigi.ObjectRef)(s).Cast(StatementClass))
+}
+
+func (f *ForEachStatement) SetIterable(s *Statement) {
+	(*jnigi.ObjectRef)(f).CallMethod(env, "setIterable", nil, (*jnigi.ObjectRef)(s).Cast(StatementClass))
+}
+
+func (f *ForEachStatement) SetStatement(s *Statement) {
+	(*jnigi.ObjectRef)(f).CallMethod(env, "setStatement", nil, (*jnigi.ObjectRef)(s).Cast(StatementClass))
 }

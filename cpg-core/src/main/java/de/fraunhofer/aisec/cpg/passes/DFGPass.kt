@@ -53,6 +53,14 @@ class DFGPass : Pass() {
         for (tu in tr.translationUnits) {
             walker.iterate(tu)
         }
+
+        walker.clearCallbacks()
+        walker.registerOnNodeVisit { node ->
+            if (node is TupleExpression) handleTupleExpression(node)
+        }
+        for (tu in tr.translationUnits) {
+            walker.iterate(tu)
+        }
     }
 
     override fun cleanup() {
@@ -90,6 +98,38 @@ class DFGPass : Pass() {
         }
     }
 
+    private fun handleTupleExpression(node: TupleExpression) {
+        val worklist = mutableListOf<Node>(node)
+        val seen = mutableSetOf<Node>()
+
+        while (!worklist.isEmpty()) {
+            val n = worklist.removeLast()
+            if (n in seen) {
+                continue
+            }
+
+            seen.add(n)
+
+            if (n is DestructureTupleExpression) {
+                val ix = n.getTupleIndex()
+                val members = node.getMembers()
+                if (ix < members.size) {
+                    members.get(ix).addNextDFG(n)
+                }
+
+                if (n.getRefersTo() != null) {
+                    n.removePrevDFG(n.getRefersTo())
+                }
+
+                continue
+            }
+
+            for (ch in n.nextDFG) {
+                worklist.add(ch)
+            }
+        }
+    }
+
     /**
      * For a [MemberExpression], the base flows to the expression if the field is not implemented in
      * the code under analysis. Otherwise, it's handled as a [DeclaredReferenceExpression].
@@ -110,7 +150,18 @@ class DFGPass : Pass() {
      * the function.
      */
     private fun handleVariableDeclaration(node: VariableDeclaration) {
-        node.initializer?.let { node.addPrevDFG(it) }
+        log.info("Handle variable decl: " + node.name)
+        val ni = node.initializer
+
+        if (ni == null) {
+            log.info("Null initializer")
+        } else {
+            node.addPrevDFG(ni)
+        }
+
+        // node.initializer?.let {
+        //     node.addPrevDFG(it)
+        // }
     }
 
     /**

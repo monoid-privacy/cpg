@@ -34,6 +34,18 @@ import (
 	"tekao.net/jnigi"
 )
 
+func (frontend *GoLanguageFrontend) NewTupleExpression(fset *token.FileSet, astNode ast.Node) *cpg.TupleExpression {
+	return (*cpg.TupleExpression)(frontend.NewExpression("TupleExpression", fset, astNode))
+}
+
+func (frontend *GoLanguageFrontend) NewProblemExpression(fset *token.FileSet, astNode ast.Node, problem string) *cpg.Expression {
+	return (*cpg.Expression)(frontend.NewExpression("ProblemExpression", fset, astNode, cpg.NewString(problem)))
+}
+
+func (frontend *GoLanguageFrontend) NewDestructureTupleExpression(fset *token.FileSet, astNode ast.Node) *cpg.DestructureTupleExpression {
+	return (*cpg.DestructureTupleExpression)(frontend.NewExpression("DestructureTupleExpression", fset, astNode))
+}
+
 func (frontend *GoLanguageFrontend) NewCallExpression(fset *token.FileSet, astNode ast.Node) *cpg.CallExpression {
 	return (*cpg.CallExpression)(frontend.NewExpression("CallExpression", fset, astNode))
 }

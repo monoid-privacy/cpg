@@ -136,6 +136,10 @@ func (f *FieldDeclaration) SetType(t *Type) {
 	(*HasType)(f).SetType(t)
 }
 
+func (f *FieldDeclaration) SetIsEmbeddedField(b bool) error {
+	return (*jnigi.ObjectRef)(f).CallMethod(env, "setIsEmbeddedField", nil, NewBoolean(b))
+}
+
 func (v *VariableDeclaration) SetType(t *Type) {
 	(*HasType)(v).SetType(t)
 }

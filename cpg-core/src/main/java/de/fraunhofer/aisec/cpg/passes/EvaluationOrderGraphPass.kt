@@ -186,6 +186,12 @@ open class EvaluationOrderGraphPass : Pass() {
         map[ConstructExpression::class.java] = CallableInterface {
             handleConstructExpression(it as ConstructExpression)
         }
+        map[TupleExpression::class.java] = CallableInterface {
+            handleTupleExpression(it as TupleExpression)
+        }
+        map[DestructureTupleExpression::class.java] = CallableInterface {
+            handleDestructureTupleDeclaration(it as DestructureTupleExpression)
+        }
         map[EmptyStatement::class.java] = CallableInterface { handleDefault(it as EmptyStatement) }
         map[Literal::class.java] = CallableInterface { handleDefault(it) }
         map[DefaultStatement::class.java] = CallableInterface { handleDefault(it) }
@@ -405,6 +411,19 @@ open class EvaluationOrderGraphPass : Pass() {
             createEOG(arg)
         }
         // then the call itself
+        pushToEOG(node)
+    }
+
+    protected fun handleDestructureTupleDeclaration(node: DestructureTupleExpression) {
+        createEOG(node.refersTo)
+        pushToEOG(node)
+    }
+
+    protected fun handleTupleExpression(node: TupleExpression) {
+        for (m in node.getMembers()) {
+            createEOG(m)
+        }
+
         pushToEOG(node)
     }
 
@@ -861,7 +880,11 @@ open class EvaluationOrderGraphPass : Pass() {
         currentProperties[Properties.BRANCH] = true
         val tmpEOGNodes = ArrayList(currentEOG)
         createEOG(node.statement)
-        createEOG(node.iterationStatement)
+
+        if (node.iterationStatement != null) {
+            createEOG(node.iterationStatement)
+        }
+
         connectCurrentToLoopStart()
         currentEOG.clear()
         val currentLoopScope = scopeManager.leaveScope(node) as LoopScope?

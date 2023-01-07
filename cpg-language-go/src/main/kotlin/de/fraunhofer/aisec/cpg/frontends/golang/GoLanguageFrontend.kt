@@ -31,12 +31,15 @@ import de.fraunhofer.aisec.cpg.frontends.LanguageFrontend
 import de.fraunhofer.aisec.cpg.frontends.SupportsParallelParsing
 import de.fraunhofer.aisec.cpg.frontends.TranslationException
 import de.fraunhofer.aisec.cpg.graph.declarations.TranslationUnitDeclaration
+import de.fraunhofer.aisec.cpg.passes.ResolveGoInterfaceImplementations
+import de.fraunhofer.aisec.cpg.passes.order.RegisterExtraPass
 import de.fraunhofer.aisec.cpg.passes.scopes.ScopeManager
 import de.fraunhofer.aisec.cpg.sarif.PhysicalLocation
 import java.io.File
 import java.io.FileOutputStream
 
 @SupportsParallelParsing(false)
+@RegisterExtraPass(ResolveGoInterfaceImplementations::class)
 class GoLanguageFrontend(
     language: Language<GoLanguageFrontend>,
     config: TranslationConfiguration,

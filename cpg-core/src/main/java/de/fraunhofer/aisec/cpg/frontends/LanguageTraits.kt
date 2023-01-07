@@ -89,6 +89,10 @@ interface HasComplexCallResolution : LanguageTrait {
     ): List<FunctionDeclaration>
 }
 
+interface HasImplicitInterfaces : LanguageTrait
+
+interface HasNoClassScope : LanguageTrait
+
 /** A language trait that specifies if the language supports function pointers. */
 interface HasFunctionPointers : LanguageTrait
 
