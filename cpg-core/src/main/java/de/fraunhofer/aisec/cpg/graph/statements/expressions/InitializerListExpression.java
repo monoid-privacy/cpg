@@ -91,8 +91,6 @@ public class InitializerListExpression extends Expression implements TypeListene
 
   @Override
   public void typeChanged(HasType src, List<HasType> root, Type oldType) {
-    LOGGER.info("updating type: " + src.getType().getTypeName());
-
     if (!TypeManager.isTypeSystemActive()) {
       return;
     }

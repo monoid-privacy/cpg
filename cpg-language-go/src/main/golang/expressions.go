@@ -63,6 +63,7 @@ type ConstructExpression Expression
 type InitializerListExpression Expression
 type MemberCallExpression CallExpression
 type MemberExpression Expression
+type LambdaExpression Expression
 type BinaryOperator Expression
 type UnaryOperator Expression
 type Literal Expression
@@ -109,6 +110,10 @@ func (m *MemberCallExpression) SetMember(n *Node) {
 
 func (m *MemberCallExpression) Expression() *Expression {
 	return (*Expression)(m)
+}
+
+func (l *LambdaExpression) SetFunction(f *FunctionDeclaration) {
+	(*jnigi.ObjectRef)(l).SetField(env, "function", (*jnigi.ObjectRef)(f).Cast(FunctionDeclarationClass))
 }
 
 func (m *MemberExpression) SetBase(e *Expression) {

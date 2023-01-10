@@ -44,7 +44,6 @@ import de.fraunhofer.aisec.cpg.passes.inference.inferFunction
 import de.fraunhofer.aisec.cpg.passes.inference.inferMethod
 import de.fraunhofer.aisec.cpg.passes.inference.startInference
 import de.fraunhofer.aisec.cpg.passes.order.DependsOn
-import de.fraunhofer.aisec.cpg.passes.scopes.NameScope
 import de.fraunhofer.aisec.cpg.processing.strategy.Strategy
 import java.util.*
 import java.util.regex.Pattern
@@ -81,10 +80,6 @@ open class CallResolver : SymbolResolverPass() {
 
     override fun accept(translationResult: TranslationResult) {
         scopeManager = translationResult.scopeManager
-
-        for (scope in scopeManager.filterScopes { s -> s is NameScope }) {
-            log.info("Scope: " + scope.scopedName)
-        }
 
         config = translationResult.config
 
@@ -177,6 +172,8 @@ open class CallResolver : SymbolResolverPass() {
     }
 
     private fun handleCallExpression(curClass: RecordDeclaration?, call: CallExpression) {
+        log.info("cFQN: " + call.fqn + " " + call.code)
+
         if (
             call.base is DeclaredReferenceExpression &&
                 isSuperclassReference(call.base as DeclaredReferenceExpression)
@@ -186,8 +183,8 @@ open class CallResolver : SymbolResolverPass() {
         }
 
         if (call is MemberCallExpression) {
+            log.info("Is member call expression")
             val member = call.member
-            log.info("cFQN: " + call.fqn)
             if (!(member is HasType && (member as HasType).type is FunctionPointerType)) {
                 // function pointers are handled by extra pass
                 handleMethodCall(curClass, call)
@@ -210,7 +207,7 @@ open class CallResolver : SymbolResolverPass() {
         // but it isn't
         val funcPointer =
             walker.getDeclarationForScope(call) { v ->
-                v.type is FunctionPointerType && v.name == call.name
+                (v.type is FunctionPointerType || v.type is FunctionType) && v.name == call.name
             }
         if (!funcPointer.isPresent) {
             log.info("Handling normal: " + call.fqn)
@@ -222,8 +219,10 @@ open class CallResolver : SymbolResolverPass() {
     private fun resolveArguments(call: CallExpression) {
         val worklist: Deque<Node> = ArrayDeque()
         call.arguments.forEach { worklist.push(it) }
+
         while (!worklist.isEmpty()) {
             val curr = worklist.pop()
+
             if (curr is CallExpression) {
                 resolve(curr)
             } else {
@@ -239,7 +238,6 @@ open class CallResolver : SymbolResolverPass() {
     }
 
     protected open fun handleNormalCalls(curClass: RecordDeclaration?, call: CallExpression) {
-        log.info("Handle normal calls: " + (curClass?.name ?: "UNK"))
         if (curClass == null) {
             // Handle function (not method) calls
             // C++ allows function overloading. Make sure we have at least the same number of
@@ -301,15 +299,9 @@ open class CallResolver : SymbolResolverPass() {
             }
         }
 
-        log.info("Num methods: " + invocationCandidates.size)
         if (invocationCandidates.size != 0) {
             log.info(
-                "FFF: " +
-                    invocationCandidates[0].name +
-                    " " +
-                    invocationCandidates[0].isInferred +
-                    " " +
-                    invocationCandidates[0].code
+                "FFF: " + invocationCandidates[0].name + " " + invocationCandidates[0].isInferred
             )
         }
 
@@ -485,7 +477,7 @@ open class CallResolver : SymbolResolverPass() {
                         "",
                         true,
                         call.signature,
-                        call.type // TODO: Is this correct?
+                        listOf(call.type) // TODO: Is this correct?
                     )
 
             invokes.add(inferred)
@@ -524,7 +516,8 @@ open class CallResolver : SymbolResolverPass() {
             (call.language as HasComplexCallResolution).refineInvocationCandidatesFromRecord(
                 recordDeclaration,
                 call,
-                namePattern
+                namePattern,
+                this
             )
         } else {
             recordDeclaration.methods.filter {

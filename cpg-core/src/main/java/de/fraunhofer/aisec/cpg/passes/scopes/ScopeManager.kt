@@ -32,7 +32,6 @@ import de.fraunhofer.aisec.cpg.graph.statements.*
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.DeclaredReferenceExpression
 import de.fraunhofer.aisec.cpg.graph.types.FunctionPointerType
-import de.fraunhofer.aisec.cpg.graph.types.IncompleteType
 import de.fraunhofer.aisec.cpg.graph.types.Type
 import de.fraunhofer.aisec.cpg.helpers.Util
 import de.fraunhofer.aisec.cpg.processing.IVisitor
@@ -114,7 +113,7 @@ class ScopeManager : ScopeProvider {
     }
 
     companion object {
-        private val LOGGER = LoggerFactory.getLogger(ScopeManager::class.java)
+        val LOGGER = LoggerFactory.getLogger(ScopeManager::class.java)
     }
 
     /**
@@ -634,10 +633,11 @@ class ScopeManager : ScopeProvider {
                         val fptrType = (ref as HasType).type as FunctionPointerType
                         // TODO(oxisto): This is the third place where function pointers are
                         //   resolved. WHY?
-                        // TODO(oxisto): Support multiple return values
-                        val returnType = it.returnTypes.firstOrNull() ?: IncompleteType()
                         if (
-                            returnType == fptrType.returnType &&
+                            it.returnTypes.size == fptrType.returnTypes.size &&
+                                it.returnTypes
+                                    .filterIndexed { i, it -> fptrType.returnTypes[i] != it }
+                                    .isEmpty() &&
                                 it.hasSignature(fptrType.parameters)
                         ) {
                             return@resolve true
@@ -692,24 +692,14 @@ class ScopeManager : ScopeProvider {
                 }
         }
 
-        if (call.name.contains("AddFile")) {
-            LOGGER.info("Printing scope: " + call.name + " " + call.code)
-        }
-
-        val pred = { it: FunctionDeclaration ->
-            val hs = it.hasSignature(call.signature)
-
-            if (call.name.contains("AddFile")) {
-                LOGGER.info("ScopeName: " + it.name + " " + (it.body ?: "UNK") + " " + hs + " ")
-            }
-
-            it.name == call.name && hs
-        }
-
-        val res = resolve(s, false, pred)
-        if (call.name.contains("AddFile")) {
-            LOGGER.info("Res: " + res.size)
-        }
+        val res =
+            resolve(
+                s,
+                false,
+                { it: FunctionDeclaration ->
+                    it.name == call.name && it.hasSignature(call.signature)
+                }
+            )
 
         return res
     }

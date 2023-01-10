@@ -44,13 +44,18 @@ import (
 
 const MetadataProviderClass = cpg.GraphPackage + "/MetadataProvider"
 
-func getImportName(spec *ast.ImportSpec) string {
+func (frontend *GoLanguageFrontend) getImportName(spec *ast.ImportSpec) string {
 	if spec.Name != nil {
 		return spec.Name.Name
 	}
 
 	var path = spec.Path.Value[1 : len(spec.Path.Value)-1]
 	var paths = strings.Split(path, "/")
+
+	if frontend.Package != nil {
+		im := frontend.Package.Imports[path]
+		return im.Name
+	}
 
 	return paths[len(paths)-1]
 }
@@ -85,7 +90,45 @@ func (frontend *GoLanguageFrontend) ParseModule(topLevel string) (exists bool, e
 	return true, nil
 }
 
-func (this *GoLanguageFrontend) HandleFile(fset *token.FileSet, file *ast.File, path string) (tu *cpg.TranslationUnitDeclaration, err error) {
+func (this *GoLanguageFrontend) HandleFileContent(
+	fset *token.FileSet,
+	file *ast.File,
+	tu *cpg.TranslationUnitDeclaration,
+) (err error) {
+	scope := this.GetScopeManager()
+
+	// reset scope
+	scope.ResetToGlobal((*cpg.Node)(tu))
+	this.CurrentTU = tu
+
+	ns := this.NewNamespaceDeclaration(fset, nil, this.modulePath())
+
+	scope.EnterScope((*cpg.Node)(ns))
+	for _, decl := range file.Decls {
+		if v, ok := decl.(*ast.GenDecl); ok && v.Tok == token.TYPE {
+			continue
+		}
+
+		d, addToScope := this.handleDecl(fset, decl)
+
+		if d != nil && addToScope {
+			err = scope.AddDeclaration((*cpg.Declaration)(d))
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+	scope.LeaveScope((*cpg.Node)(ns))
+	scope.AddDeclaration((*cpg.Declaration)(ns))
+
+	return
+}
+
+func (this *GoLanguageFrontend) HandleFileRecordDeclarations(
+	fset *token.FileSet,
+	file *ast.File,
+	path string,
+) (tu *cpg.TranslationUnitDeclaration, err error) {
 	tu = this.NewTranslationUnitDeclaration(fset, file, path)
 
 	scope := this.GetScopeManager()
@@ -105,17 +148,19 @@ func (this *GoLanguageFrontend) HandleFile(fset *token.FileSet, file *ast.File, 
 	}
 
 	// create a new namespace declaration, representing the package
-	p := this.NewNamespaceDeclaration(fset, nil, this.modulePath())
+	namespace := this.NewNamespaceDeclaration(fset, nil, this.modulePath())
 
 	// enter scope
-	scope.EnterScope((*cpg.Node)(p))
+	scope.EnterScope((*cpg.Node)(namespace))
 
 	for _, decl := range file.Decls {
-		var d *cpg.Declaration
+		if v, ok := decl.(*ast.GenDecl); !ok || v.Tok != token.TYPE {
+			continue
+		}
 
-		d = this.handleDecl(fset, decl)
+		d, addToScope := this.handleDecl(fset, decl)
 
-		if d != nil {
+		if d != nil && addToScope {
 			err = scope.AddDeclaration((*cpg.Declaration)(d))
 			if err != nil {
 				log.Fatal(err)
@@ -125,10 +170,10 @@ func (this *GoLanguageFrontend) HandleFile(fset *token.FileSet, file *ast.File, 
 	}
 
 	// leave scope
-	scope.LeaveScope((*cpg.Node)(p))
+	scope.LeaveScope((*cpg.Node)(namespace))
 
 	// add it
-	scope.AddDeclaration((*cpg.Declaration)(p))
+	scope.AddDeclaration((*cpg.Declaration)(namespace))
 
 	return
 }
@@ -159,12 +204,15 @@ func (this *GoLanguageFrontend) handleComments(node *cpg.Node, astNode ast.Node)
 	}
 }
 
-func (this *GoLanguageFrontend) handleDecl(fset *token.FileSet, decl ast.Decl) (d *cpg.Declaration) {
+func (this *GoLanguageFrontend) handleDecl(fset *token.FileSet, decl ast.Decl) (d *cpg.Declaration, addToScope bool) {
 	this.LogDebug("Handling declaration (%T): %+v", decl, decl)
+	addToScope = true
 
 	switch v := decl.(type) {
 	case *ast.FuncDecl:
-		d = (*cpg.Declaration)(this.handleFuncDecl(fset, v))
+		fdecl, funcAddToScope := this.handleFuncDecl(fset, v)
+		d = (*cpg.Declaration)(fdecl)
+		addToScope = funcAddToScope
 	case *ast.GenDecl:
 		d = (*cpg.Declaration)(this.handleGenDecl(fset, v))
 	default:
@@ -186,13 +234,15 @@ func (this *GoLanguageFrontend) addFuncTypeData(f *cpg.FunctionDeclaration, fset
 
 	if funcDecl.Type.Results != nil {
 		for _, returnVariable := range funcDecl.Type.Results.List {
-			returnTypes = append(returnTypes, this.handleType(returnVariable.Type))
+			t := this.handleType(returnVariable.Type)
+
+			returnTypes = append(returnTypes, t)
 
 			// if the function has named return variables, be sure to declare them as well
 			if returnVariable.Names != nil {
 				p := this.NewVariableDeclaration(fset, returnVariable, returnVariable.Names[0].Name)
 
-				p.SetType(this.handleType(returnVariable.Type))
+				p.SetType(t)
 
 				// add parameter to scope
 				this.GetScopeManager().AddDeclaration((*cpg.Declaration)(p))
@@ -226,7 +276,6 @@ func (this *GoLanguageFrontend) addFuncTypeData(f *cpg.FunctionDeclaration, fset
 		}
 
 		p := this.NewParamVariableDeclaration(fset, param, name)
-
 		p.SetType(this.handleType(param.Type))
 
 		// add parameter to scope
@@ -236,8 +285,44 @@ func (this *GoLanguageFrontend) addFuncTypeData(f *cpg.FunctionDeclaration, fset
 	}
 }
 
-func (this *GoLanguageFrontend) handleFuncDecl(fset *token.FileSet, funcDecl *ast.FuncDecl) *jnigi.ObjectRef {
-	this.LogInfo("Handling func Decl: %+v", *funcDecl)
+func (this *GoLanguageFrontend) handleFuncLit(fset *token.FileSet, funcLit *ast.FuncLit) *jnigi.ObjectRef {
+	this.LogInfo("Handling func lit: %+v", *funcLit)
+	var scope = this.GetScopeManager()
+
+	f := this.NewFunctionDeclaration(fset, funcLit, "")
+	scope.EnterScope((*cpg.Node)(f))
+	this.addFuncTypeData(f, fset, &ast.FuncDecl{
+		Type: funcLit.Type,
+	})
+
+	this.LogInfo("Parsing function body of %s", (*cpg.Node)(f).GetName())
+
+	if funcLit.Body != nil {
+		// parse body
+		s := this.handleBlockStmt(fset, funcLit.Body)
+
+		err := f.SetBody((*cpg.Statement)(s))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// leave scope
+	err := scope.LeaveScope((*cpg.Node)(f))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	scope.AddDeclaration((*cpg.Declaration)(f))
+
+	r := this.NewLambdaExpression(fset, funcLit)
+	r.SetFunction(f)
+
+	return (*jnigi.ObjectRef)(r)
+}
+
+func (this *GoLanguageFrontend) handleFuncDecl(fset *token.FileSet, funcDecl *ast.FuncDecl) (*jnigi.ObjectRef, bool) {
+	this.LogDebug("Handling func Decl: %+v", *funcDecl)
 
 	var scope = this.GetScopeManager()
 	var receiver *cpg.VariableDeclaration
@@ -302,6 +387,8 @@ func (this *GoLanguageFrontend) handleFuncDecl(fset *token.FileSet, funcDecl *as
 					log.Fatal(err)
 
 				}
+			} else {
+				this.LogInfo("Record is nil: %s", recordName)
 			}
 		}
 
@@ -311,7 +398,7 @@ func (this *GoLanguageFrontend) handleFuncDecl(fset *token.FileSet, funcDecl *as
 	}
 
 	if record != nil && !record.IsNil() {
-		this.LogInfo("Entering scope")
+		this.LogInfo("Entering record scope.")
 		scope.EnterScope((*cpg.Node)(record))
 	}
 	// enter scope for function
@@ -321,7 +408,7 @@ func (this *GoLanguageFrontend) handleFuncDecl(fset *token.FileSet, funcDecl *as
 		this.LogDebug("Adding receiver %s", (*cpg.Node)(receiver).GetName())
 
 		// add the receiver do the scope manager, so we can resolve the receiver value
-		this.GetScopeManager().AddDeclaration((*cpg.Declaration)(receiver))
+		scope.AddDeclaration((*cpg.Declaration)(receiver))
 	}
 
 	this.addFuncTypeData(f, fset, funcDecl)
@@ -345,10 +432,13 @@ func (this *GoLanguageFrontend) handleFuncDecl(fset *token.FileSet, funcDecl *as
 	}
 
 	if record != nil && !record.IsNil() {
+		scope.AddDeclaration((*cpg.Declaration)(f))
 		scope.LeaveScope((*cpg.Node)(record))
+
+		return (*jnigi.ObjectRef)(f), false
 	}
 
-	return (*jnigi.ObjectRef)(f)
+	return (*jnigi.ObjectRef)(f), true
 }
 
 func (this *GoLanguageFrontend) handleGenDecl(fset *token.FileSet, genDecl *ast.GenDecl) *jnigi.ObjectRef {
@@ -400,7 +490,7 @@ func (this *GoLanguageFrontend) handleValueSpec(fset *token.FileSet, valueDecl *
 }
 
 func (this *GoLanguageFrontend) handleTypeSpec(fset *token.FileSet, typeDecl *ast.TypeSpec) *cpg.Declaration {
-	err := this.LogInfo("Type specifier with name %s and type (%T, %+v)", typeDecl.Name.Name, typeDecl.Type, typeDecl.Type)
+	err := this.LogDebug("Type specifier with name %s and type (%T, %+v)", typeDecl.Name.Name, typeDecl.Type, typeDecl.Type)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -418,9 +508,9 @@ func (this *GoLanguageFrontend) handleTypeSpec(fset *token.FileSet, typeDecl *as
 }
 
 func (this *GoLanguageFrontend) handleImportSpec(fset *token.FileSet, importSpec *ast.ImportSpec) *cpg.Declaration {
-	this.LogInfo("Import specifier with: %+v)", *importSpec)
+	this.LogDebug("Import specifier with: %+v %s)", *importSpec, importSpec.Path)
 
-	i := this.NewIncludeDeclaration(fset, importSpec, getImportName(importSpec))
+	i := this.NewIncludeDeclaration(fset, importSpec, this.getImportName(importSpec))
 
 	var scope = this.GetScopeManager()
 
@@ -439,16 +529,12 @@ func (this *GoLanguageFrontend) modulePath() string {
 		return this.File.Name.Name
 	}
 
-	pack := this.RelativeFilePath
-	if pack == "" {
-		pack = this.File.Name.Name
+	packPath := this.Module.Module.Mod.Path
+	if this.RelativeFilePath != "" {
+		packPath += "/" + this.RelativeFilePath
 	}
 
-	return fmt.Sprintf(
-		"%s/%s",
-		this.Module.Module.Mod.Path,
-		pack,
-	)
+	return packPath
 }
 
 func (this *GoLanguageFrontend) handleIdentAsName(ident *ast.Ident) string {
@@ -465,6 +551,8 @@ func (this *GoLanguageFrontend) handleStructTypeSpec(fset *token.FileSet, typeDe
 	var scope = this.GetScopeManager()
 
 	scope.EnterScope((*cpg.Node)(r))
+
+	this.LogDebug("Handle struct: %s", this.handleIdentAsName(typeDecl.Name))
 
 	if !structType.Incomplete {
 		for _, field := range structType.Fields.List {
@@ -508,7 +596,6 @@ func (this *GoLanguageFrontend) handleStructTypeSpec(fset *token.FileSet, typeDe
 }
 
 func (this *GoLanguageFrontend) handleTypeAlias(fset *token.FileSet, typeDecl *ast.TypeSpec, aliasName *ast.Ident) *cpg.RecordDeclaration {
-	this.LogInfo("Handle type alias")
 	r := this.NewRecordDeclaration(fset, typeDecl, this.handleIdentAsName(typeDecl.Name), "type")
 
 	var scope = this.GetScopeManager()
@@ -516,14 +603,15 @@ func (this *GoLanguageFrontend) handleTypeAlias(fset *token.FileSet, typeDecl *a
 	scope.EnterScope((*cpg.Node)(r))
 	scope.LeaveScope((*cpg.Node)(r))
 
-	decl := this.handleFuncDecl(fset, &ast.FuncDecl{
+	decl, _ := this.handleFuncDecl(fset, &ast.FuncDecl{
 		Name: ast.NewIdent(typeDecl.Name.Name),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{
 					{
 						Names: []*ast.Ident{ast.NewIdent("_")},
-						Type:  typeDecl.Type,
+						// TODO: Handle tree of aliased types.
+						Type: &ast.BadExpr{},
 					},
 				},
 			},
@@ -560,7 +648,7 @@ func (this *GoLanguageFrontend) handleInterfaceTypeSpec(fset *token.FileSet, typ
 			// "method" actually has a name, we declare a new method
 			// declaration.
 			if len(method.Names) > 0 {
-				this.LogInfo("Creating new interface method decl %+v", *method)
+				this.LogDebug("Creating new interface method decl %+v", *method)
 				m := this.NewMethodDeclaration(fset, method, method.Names[0].Name)
 				m.SetType(t)
 				scope.AddDeclaration((*cpg.Declaration)(m))
@@ -727,6 +815,8 @@ func (this *GoLanguageFrontend) handleStmt(fset *token.FileSet, stmt ast.Stmt) (
 		s = (*cpg.Statement)(this.handleIncDecStmt(fset, v))
 	case *ast.RangeStmt:
 		s = (*cpg.Statement)(this.handleRangeStmnt(fset, v))
+	case *ast.GoStmt:
+		s = (*cpg.Statement)(this.handleExpr(fset, v.Call))
 	case nil:
 		s = nil
 	default:
@@ -742,31 +832,78 @@ func (this *GoLanguageFrontend) handleStmt(fset *token.FileSet, stmt ast.Stmt) (
 }
 
 func (this *GoLanguageFrontend) handleRangeStmnt(fset *token.FileSet, expr *ast.RangeStmt) *cpg.ForEachStatement {
-	this.LogInfo("Handing range statement: %+v", *expr)
+	this.LogDebug("Handling range statement: %+v", *expr)
+
+	scope := this.GetScopeManager()
 	r := this.NewForEachStatement(fset, expr)
-	s := this.NewDeclarationStatement(fset, expr)
 	it := this.handleExpr(fset, expr.X)
 
-	if expr.Key == nil {
-	} else if expr.Key != nil && expr.Value == nil {
-		d := this.NewVariableDeclaration(fset, expr.Key, expr.Key.(*ast.Ident).Name)
-		t := this.Package.TypesInfo.TypeOf(expr.Key)
-		this.LogInfo("Key Type: %s", t)
-		if t != nil {
-			d.SetType(this.handleTypingType(t))
+	scope.EnterScope((*cpg.Node)(r))
+
+	switch expr.Tok {
+	case token.ILLEGAL:
+		// Set a blank declaration statement to the variable
+		// to make the core lib happy.
+		s := this.NewDeclarationStatement(fset, expr)
+		r.SetVariable((*cpg.Statement)(s))
+	case token.ASSIGN:
+		if expr.Key != nil && expr.Value == nil {
+			expr := this.handleExpr(fset, expr.Key)
+			r.SetVariable((*cpg.Statement)(expr))
+		} else if expr.Key != nil && expr.Value != nil {
+			kexpr := this.handleExpr(fset, expr.Key)
+			vexpr := this.handleExpr(fset, expr.Value)
+			r.AddVariable((*cpg.Statement)(kexpr))
+			r.AddVariable((*cpg.Statement)(vexpr))
+		}
+	case token.DEFINE:
+		s := this.NewDeclarationStatement(fset, expr)
+
+		if expr.Key != nil && expr.Value == nil {
+			d := this.NewVariableDeclaration(fset, expr.Key, expr.Key.(*ast.Ident).Name)
+			if this.Package != nil {
+				t := this.Package.TypesInfo.TypeOf(expr.Key)
+				if t != nil {
+					d.SetType(this.handleTypingType(t))
+				}
+			}
+
+			s.SetSingleDeclaration((*cpg.Declaration)(d))
+			scope.AddDeclaration((*cpg.Declaration)(d))
+		} else if expr.Key != nil && expr.Value != nil {
+			k := this.NewVariableDeclaration(fset, expr.Key, expr.Key.(*ast.Ident).Name)
+			if this.Package != nil {
+				kt := this.Package.TypesInfo.TypeOf(expr.Key)
+				if kt != nil {
+					k.SetType(this.handleTypingType(kt))
+				}
+			}
+
+			v := this.NewVariableDeclaration(fset, expr.Value, expr.Value.(*ast.Ident).Name)
+			if this.Package != nil {
+				vt := this.Package.TypesInfo.TypeOf(expr.Value)
+
+				if vt != nil {
+					v.SetType(this.handleTypingType(vt))
+				}
+			}
+
+			s.AddDeclaration((*cpg.Declaration)(k))
+			s.AddDeclaration((*cpg.Declaration)(v))
+
+			scope.AddDeclaration((*cpg.Declaration)(k))
+			scope.AddDeclaration((*cpg.Declaration)(v))
 		}
 
-		s.SetSingleDeclaration((*cpg.Declaration)(d))
-	} else {
-		t := this.Package.TypesInfo.TypeOf(expr.Value)
-		this.LogInfo("Val Type: %s", t)
+		r.SetVariable((*cpg.Statement)(s))
 	}
 
-	r.SetVariable((*cpg.Statement)(s))
 	r.SetIterable((*cpg.Statement)(it))
 
 	then := this.handleBlockStmt(fset, expr.Body)
 	r.SetStatement((*cpg.Statement)(then))
+
+	scope.LeaveScope((*cpg.Node)(r))
 
 	return r
 }
@@ -799,6 +936,8 @@ func (this *GoLanguageFrontend) handleExpr(fset *token.FileSet, expr ast.Expr) (
 		e = (*cpg.Expression)(this.handleTypeAssertExpr(fset, v))
 	case *ast.ParenExpr:
 		e = this.handleExpr(fset, v.X)
+	case *ast.FuncLit:
+		e = (*cpg.Expression)(this.handleFuncLit(fset, v))
 	default:
 		this.LogError("Could not parse expression of type %T: %+v", v, v)
 		// TODO: return an error instead?
@@ -812,7 +951,7 @@ func (this *GoLanguageFrontend) handleExpr(fset *token.FileSet, expr ast.Expr) (
 	return
 }
 
-func (this *GoLanguageFrontend) handleAssignStmt(fset *token.FileSet, assignStmt *ast.AssignStmt) (expr *cpg.Expression) {
+func (this *GoLanguageFrontend) handleAssignStmt(fset *token.FileSet, assignStmt *ast.AssignStmt) (expr *cpg.Statement) {
 	this.LogDebug("Handling assignment statement: %+v", assignStmt)
 
 	var rhs *cpg.Expression
@@ -833,6 +972,10 @@ func (this *GoLanguageFrontend) handleAssignStmt(fset *token.FileSet, assignStmt
 		rhs = (*cpg.Expression)(tup)
 	} else {
 		rhs = this.handleExpr(fset, assignStmt.Rhs[0])
+
+		if rhs == nil {
+			rhs = (*cpg.Expression)(this.NewProblemExpression(fset, assignStmt, "Could not convert."))
+		}
 	}
 
 	if assignStmt.Tok == token.DEFINE {
@@ -840,12 +983,10 @@ func (this *GoLanguageFrontend) handleAssignStmt(fset *token.FileSet, assignStmt
 		stmt := this.NewDeclarationStatement(fset, assignStmt)
 
 		if len(assignStmt.Lhs) > 1 {
-			decls := make([]*cpg.Declaration, len(assignStmt.Lhs))
-
 			for i, ls := range assignStmt.Lhs {
 				name := ls.(*ast.Ident).Name
 				d := this.NewVariableDeclaration(fset, ls, name)
-				decls[i] = (*cpg.Declaration)(d)
+				stmt.AddDeclaration((*cpg.Declaration)(d))
 
 				tupdest := this.NewDestructureTupleExpression(fset, assignStmt)
 
@@ -859,7 +1000,6 @@ func (this *GoLanguageFrontend) handleAssignStmt(fset *token.FileSet, assignStmt
 				this.GetScopeManager().AddDeclaration((*cpg.Declaration)(d))
 			}
 
-			stmt.SetDeclarations(decls)
 		} else {
 			var name = assignStmt.Lhs[0].(*ast.Ident).Name
 			d := this.NewVariableDeclaration(fset, assignStmt, name)
@@ -872,22 +1012,47 @@ func (this *GoLanguageFrontend) handleAssignStmt(fset *token.FileSet, assignStmt
 			stmt.SetSingleDeclaration((*cpg.Declaration)(d))
 		}
 
-		expr = (*cpg.Expression)(stmt)
+		expr = (*cpg.Statement)(stmt)
 	} else {
-		// TODO: handle multiple assignment
-		lhs := this.handleExpr(fset, assignStmt.Lhs[0])
+		if len(assignStmt.Lhs) > 1 {
+			c := this.NewCompoundStatement(fset, assignStmt)
 
-		b := this.NewBinaryOperator(fset, assignStmt, "=")
+			for i, ls := range assignStmt.Lhs {
+				lhs := this.handleExpr(fset, ls)
 
-		if lhs != nil {
-			b.SetLHS(lhs)
+				if lhs == nil {
+					continue
+				}
+
+				tupdest := this.NewDestructureTupleExpression(fset, assignStmt)
+
+				tupdest.SetTupleIndex(i)
+				if rhs != nil {
+					tupdest.SetRefersTo(rhs)
+				}
+
+				b := this.NewBinaryOperator(fset, assignStmt, "=")
+				b.SetLHS(lhs)
+				b.SetRHS((*cpg.Expression)(tupdest))
+
+				c.AddStatement((*cpg.Statement)(b))
+			}
+
+			expr = (*cpg.Statement)(c)
+		} else {
+			lhs := this.handleExpr(fset, assignStmt.Lhs[0])
+			b := this.NewBinaryOperator(fset, assignStmt, "=")
+
+			if lhs != nil {
+				b.SetLHS(lhs)
+			}
+
+			if rhs != nil {
+				b.SetRHS(rhs)
+			}
+
+			expr = (*cpg.Statement)(b)
 		}
-
-		if rhs != nil {
-			b.SetRHS(rhs)
-		}
-
-		expr = (*cpg.Expression)(b)
 	}
 
 	return
@@ -900,7 +1065,7 @@ func (this *GoLanguageFrontend) handleDeclStmt(fset *token.FileSet, declStmt *as
 	// because we define the variable here
 	stmt := this.NewDeclarationStatement(fset, declStmt)
 
-	d := this.handleDecl(fset, declStmt.Decl)
+	d, _ := this.handleDecl(fset, declStmt.Decl)
 
 	if d != nil {
 		stmt.SetSingleDeclaration((*cpg.Declaration)(d))
@@ -1008,7 +1173,7 @@ func (this *GoLanguageFrontend) handleCallExpr(fset *token.FileSet, callExpr *as
 	}
 
 	name := reference.GetName()
-	this.LogInfo("Name: %s", name)
+	this.LogDebug("Handling call: %s", name)
 
 	if name == "new" {
 		return this.handleNewExpr(fset, callExpr)
@@ -1032,7 +1197,7 @@ func (this *GoLanguageFrontend) handleCallExpr(fset *token.FileSet, callExpr *as
 
 		c = (*cpg.CallExpression)(m)
 	} else {
-		this.LogInfo("Handling regular call expression to %s", name)
+		this.LogDebug("Handling regular call expression to %s", name)
 
 		c = this.NewCallExpression(fset, callExpr)
 
@@ -1055,6 +1220,8 @@ func (this *GoLanguageFrontend) handleCallExpr(fset *token.FileSet, callExpr *as
 
 		if e != nil {
 			c.AddArgument(e)
+		} else {
+			c.AddArgument(this.NewProblemExpression(fset, arg, "Could not parse argument."))
 		}
 	}
 
@@ -1180,21 +1347,23 @@ func (this *GoLanguageFrontend) handleStarExpr(fset *token.FileSet, unaryExpr *a
 }
 
 func (this *GoLanguageFrontend) handleSelectorExpr(fset *token.FileSet, selectorExpr *ast.SelectorExpr) *cpg.DeclaredReferenceExpression {
+	this.LogDebug("Handle selector: %+v", selectorExpr)
 	base := this.handleExpr(fset, selectorExpr.X)
+	_, xident := selectorExpr.X.(*ast.Ident)
 
 	// check, if this just a regular reference to a variable with a package scope and not a member expression
 	var isMemberExpression bool = true
 	importPath := ""
 
 	for _, imp := range this.File.Imports {
-		if base.GetName() == getImportName(imp) {
+		if base.GetName() == this.getImportName(imp) && xident {
 			// found a package name, so this is NOT a member expression
 			isMemberExpression = false
 			var err error
 			importPath, err = strconv.Unquote(imp.Path.Value)
 			if err != nil {
 				this.LogError("Error resolving import: %s", imp.Path.Value)
-				importPath = getImportName(imp)
+				importPath = this.getImportName(imp)
 			}
 		}
 	}
@@ -1203,10 +1372,15 @@ func (this *GoLanguageFrontend) handleSelectorExpr(fset *token.FileSet, selector
 	if isMemberExpression {
 		m := this.NewMemberExpression(fset, selectorExpr, selectorExpr.Sel.Name, base)
 
+		if this.Package != nil {
+			t := this.Package.TypesInfo.TypeOf(selectorExpr)
+			if t != nil {
+				((*cpg.Expression)(m)).SetType(this.handleTypingType(t))
+			}
+		}
+
 		decl = (*cpg.DeclaredReferenceExpression)(m)
 	} else {
-		this.LogInfo("Selector: %s", importPath)
-
 		// we need to set the name to a FQN-style, including the package scope. the call resolver will then resolve this
 		fqn := fmt.Sprintf("%s.%s", importPath, selectorExpr.Sel.Name)
 
@@ -1331,8 +1505,6 @@ func (this *GoLanguageFrontend) handleCompositeLit(fset *token.FileSet, lit *ast
 	c.AddPrevDFG((*cpg.Node)(l))
 
 	for _, elem := range lit.Elts {
-		this.LogInfo("Elt %T%+v", elem, elem)
-
 		var expr *cpg.Expression
 
 		switch v := elem.(type) {
@@ -1377,6 +1549,13 @@ func (this *GoLanguageFrontend) handleIdent(fset *token.FileSet, ident *ast.Iden
 		ref.SetRefersTo((*cpg.Declaration)(i))
 	}
 
+	if this.Package != nil {
+		t := this.Package.TypesInfo.TypeOf(ident)
+		if t != nil {
+			((*cpg.Expression)(ref)).SetType(this.handleTypingType(t))
+		}
+	}
+
 	return (*cpg.Expression)(ref)
 }
 
@@ -1397,7 +1576,7 @@ func (this *GoLanguageFrontend) handleTypeAssertExpr(fset *token.FileSet, assert
 
 func (this *GoLanguageFrontend) procesIdentResolveImports(ident *ast.Ident) string {
 	for _, imp := range this.File.Imports {
-		if ident.Name == getImportName(imp) {
+		if ident.Name == this.getImportName(imp) {
 			res, err := strconv.Unquote(imp.Path.Value)
 			if err != nil {
 				break
@@ -1416,8 +1595,10 @@ func (this *GoLanguageFrontend) handleTypingType(ttype types.Type) *cpg.Type {
 		panic(err)
 	}
 
+	this.LogDebug("Handling type %s %T", ttype.String(), ttype)
+
 	switch v := ttype.(type) {
-	case *types.Struct, *types.Interface:
+	case *types.Named, *types.Interface, *types.Struct:
 		return cpg.TypeParser_createFrom(v.String(), lang)
 	case *types.Pointer:
 		t := this.handleTypingType(v.Elem())
@@ -1428,7 +1609,6 @@ func (this *GoLanguageFrontend) handleTypingType(ttype types.Type) *cpg.Type {
 			log.Fatal(err)
 		}
 
-		this.LogInfo("Pointer to %s", t.GetName())
 		return t.Reference(i)
 	case *types.Array, *types.Slice:
 		var t *cpg.Type
@@ -1468,6 +1648,10 @@ func (this *GoLanguageFrontend) handleTypingType(ttype types.Type) *cpg.Type {
 		(&(cpg.ObjectType{Type: *t})).AddGeneric(chanType)
 
 		return t
+	case *types.Basic:
+		if this.isBuiltinType(v.String()) {
+			return cpg.TypeParser_createFrom(v.String(), lang)
+		}
 	case *types.Signature:
 		var parametersTypesList, returnTypesList, name *jnigi.ObjectRef
 		var parameterTypes = []*cpg.Type{}
@@ -1508,6 +1692,8 @@ func (this *GoLanguageFrontend) handleTypingType(ttype types.Type) *cpg.Type {
 		}
 
 		return &cpg.Type{ObjectRef: t}
+	default:
+		this.LogInfo("Can't parse %T", v)
 	}
 
 	return &cpg.UnknownType_getUnknown(lang).Type
@@ -1516,7 +1702,7 @@ func (this *GoLanguageFrontend) handleTypingType(ttype types.Type) *cpg.Type {
 func (this *GoLanguageFrontend) handleType(typeExpr ast.Expr) *cpg.Type {
 	var err error
 
-	this.LogInfo("Parsing type %T: %+v %s", typeExpr, typeExpr)
+	this.LogDebug("Parsing type %T: %+v %s", typeExpr, typeExpr)
 
 	lang, err := this.GetLanguage()
 	if err != nil {
@@ -1543,8 +1729,6 @@ func (this *GoLanguageFrontend) handleType(typeExpr ast.Expr) *cpg.Type {
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		this.LogInfo("Pointer to %s", t.GetName())
 
 		return t.Reference(i)
 	case *ast.ArrayType:

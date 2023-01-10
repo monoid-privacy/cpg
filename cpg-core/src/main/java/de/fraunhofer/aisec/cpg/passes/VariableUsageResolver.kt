@@ -448,17 +448,6 @@ open class VariableUsageResolver : SymbolResolverPass() {
         }
         val simpleName = Util.getSimpleName(reference.language, reference.name)
 
-        log.info(
-            "Simple Name: " +
-                simpleName +
-                " " +
-                containingClass.typeName +
-                " " +
-                (if (containingClass !is UnknownType) "!UK" else "UK") +
-                " " +
-                reference.code
-        )
-
         var member: FieldDeclaration? = null
         if (containingClass !is UnknownType && containingClass.typeName in recordMap) {
             member =
@@ -492,10 +481,9 @@ open class VariableUsageResolver : SymbolResolverPass() {
     }
 
     // TODO(oxisto): Move to inference class
-    private fun handleUnknownField(base: Type, name: String, type: Type): FieldDeclaration? {
+    private fun handleUnknownField(base: Type, name: String, type: Type): ValueDeclaration? {
         // unwrap a potential pointer-type
         if (base is PointerType) {
-            log.info("Unwrapping pointer")
             return handleUnknownField(base.elementType, name, type)
         }
 
@@ -525,53 +513,49 @@ open class VariableUsageResolver : SymbolResolverPass() {
             return null
         }
 
-        var target = recordDeclaration.fields.firstOrNull { it.name == name }
-
-        return if (target != null) {
-            log.info("Found target here.")
-            target
-        } else {
-            for (f in recordDeclaration.fields) {
-                if (f.isEmbeddedField()) {
-                    log.info("FieldName: " + f.type.typeName)
-                }
-            }
-
-            // Handle embedded fields
-            target =
-                recordDeclaration.fields
-                    .filter { it.isEmbeddedField() }
-                    .mapNotNull {
-                        recordMap[
-                            if (it.type is PointerType)
-                                (it.type as PointerType).elementType.typeName
-                            else it.type.typeName
-                        ]
-                    }
-                    .flatMap { it.fields }
-                    .filter { it.name == name }
-                    .map { it.definition }
-                    .firstOrNull()
-
-            if (target != null) {
-                log.info("Resolved an embedded field")
-                return target
-            }
-
-            val declaration =
-                recordDeclaration.newFieldDeclaration(
-                    name,
-                    type,
-                    listOf<String>(),
-                    "",
-                    null,
-                    null,
-                    false,
-                )
-            recordDeclaration.addField(declaration)
-            declaration.isInferred = true
-            declaration
+        var target: ValueDeclaration? = recordDeclaration.fields.firstOrNull { it.name == name }
+        if (target != null) {
+            return target
         }
+
+        target = recordDeclaration.methods.firstOrNull { it.name == name }
+        if (target != null) {
+            return target
+        }
+
+        // Handle embedded fields
+        target =
+            recordDeclaration.fields
+                .filter { it.isEmbeddedField() }
+                .mapNotNull {
+                    recordMap[
+                        if (it.type is PointerType) (it.type as PointerType).elementType.typeName
+                        else it.type.typeName
+                    ]
+                }
+                .flatMap { it.fields }
+                .filter { it.name == name }
+                .map { it.definition }
+                .firstOrNull()
+
+        if (target != null) {
+            log.info("Resolved an embedded field")
+            return target
+        }
+
+        val declaration =
+            recordDeclaration.newFieldDeclaration(
+                name,
+                type,
+                listOf<String>(),
+                "",
+                null,
+                null,
+                false,
+            )
+        recordDeclaration.addField(declaration)
+        declaration.isInferred = true
+        return declaration
     }
 
     /**
@@ -589,11 +573,11 @@ open class VariableUsageResolver : SymbolResolverPass() {
         val target =
             if (declarationHolder != null) {
                 declarationHolder.methods.firstOrNull { f ->
-                    f.matches(name, fctPtrType.returnType, fctPtrType.parameters)
+                    f.matches(name, fctPtrType.returnTypes, fctPtrType.parameters)
                 }
             } else {
                 currentTU.functions.firstOrNull { f ->
-                    f.matches(name, fctPtrType.returnType, fctPtrType.parameters)
+                    f.matches(name, fctPtrType.returnTypes, fctPtrType.parameters)
                 }
             }
         // If we didn't find anything, we create a new function or method declaration
@@ -605,7 +589,7 @@ open class VariableUsageResolver : SymbolResolverPass() {
                     null,
                     false,
                     fctPtrType.parameters,
-                    fctPtrType.returnType
+                    fctPtrType.returnTypes
                 )
     }
 

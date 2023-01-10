@@ -27,7 +27,10 @@ package de.fraunhofer.aisec.cpg_vis_neo4j
 
 import de.fraunhofer.aisec.cpg.*
 import de.fraunhofer.aisec.cpg.frontends.CompilationDatabase.Companion.fromFile
-import de.fraunhofer.aisec.cpg.helpers.Benchmark
+import de.fraunhofer.aisec.cpg.frontends.golang.GoLanguage
+import de.fraunhofer.aisec.cpg.graph.*
+import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration
+import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
 import java.io.File
 import java.net.ConnectException
 import java.nio.file.Paths
@@ -198,27 +201,40 @@ class Application : Callable<Int> {
      */
     @Throws(InterruptedException::class, ConnectException::class)
     fun pushToNeo4j(translationResult: TranslationResult) {
-        val bench = Benchmark(this.javaClass, "Push cpg to neo4j", false, translationResult)
-        log.info("Using import depth: $depth")
-        log.info(
-            "Count base nodes to save: " +
-                translationResult.components.size +
-                translationResult.additionalNodes.size
-        )
+        // val bench = Benchmark(this.javaClass, "Push cpg to neo4j", false, translationResult)
+        // log.info("Using import depth: $depth")
+        // log.info(
+        //     "Count base nodes to save: " +
+        //         translationResult.components.size +
+        //         translationResult.additionalNodes.size
+        // )
 
-        val sessionAndSessionFactoryPair = connect()
+        // val sessionAndSessionFactoryPair = connect()
 
-        val session = sessionAndSessionFactoryPair.first
-        session.beginTransaction().use { transaction ->
-            if (!noPurgeDb) session.purgeDatabase()
-            session.save(translationResult.components, depth)
-            session.save(translationResult.additionalNodes, depth)
-            transaction.commit()
+        // val session = sessionAndSessionFactoryPair.first
+        // session.beginTransaction().use { transaction ->
+        //     if (!noPurgeDb) session.purgeDatabase()
+        //     session.save(translationResult.components, depth)
+        //     session.save(translationResult.additionalNodes, depth)
+        //     transaction.commit()
+        // }
+
+        // session.clear()
+        // sessionAndSessionFactoryPair.second.close()
+        // bench.addMeasurement()
+
+        val filtVars =
+            translationResult.components[0].variables.filter { n: VariableDeclaration ->
+                n.name.lowercase() == "email"
+            }
+
+        for (v in
+            translationResult.components[0].calls.filter { c: CallExpression ->
+                c.invokes.size == 0 ||
+                    c.invokes[0].isInferred // && (c.fqn?.startsWith("gorm") ?: false)
+            }) {
+            log.info("N: " + v.invokes.size + " " + v.fqn + " " + v.code)
         }
-
-        session.clear()
-        sessionAndSessionFactoryPair.second.close()
-        bench.addMeasurement()
     }
 
     /**
@@ -296,7 +312,7 @@ class Application : Callable<Int> {
             TranslationConfiguration.builder()
                 .topLevel(topLevel)
                 .defaultLanguages()
-                .optionalLanguage("de.fraunhofer.aisec.cpg.frontends.golang.GoLanguage")
+                .registerLanguage(GoLanguage())
                 .optionalLanguage("de.fraunhofer.aisec.cpg.frontends.llvm.LLVMIRLanguage")
                 .optionalLanguage("de.fraunhofer.aisec.cpg.frontends.python.PythonLanguage")
                 .optionalLanguage("de.fraunhofer.aisec.cpg.frontends.typescript.TypeScriptLanguage")

@@ -85,7 +85,8 @@ interface HasComplexCallResolution : LanguageTrait {
     fun refineInvocationCandidatesFromRecord(
         recordDeclaration: RecordDeclaration,
         call: CallExpression,
-        namePattern: Pattern
+        namePattern: Pattern,
+        callResolver: CallResolver
     ): List<FunctionDeclaration>
 }
 

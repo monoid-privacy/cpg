@@ -31,6 +31,8 @@ import de.fraunhofer.aisec.cpg.frontends.LanguageFrontend
 import de.fraunhofer.aisec.cpg.frontends.SupportsParallelParsing
 import de.fraunhofer.aisec.cpg.frontends.TranslationException
 import de.fraunhofer.aisec.cpg.graph.declarations.TranslationUnitDeclaration
+import de.fraunhofer.aisec.cpg.passes.FunctionPointerCallResolver
+import de.fraunhofer.aisec.cpg.passes.ResolveGoEmbeddedMembers
 import de.fraunhofer.aisec.cpg.passes.ResolveGoInterfaceImplementations
 import de.fraunhofer.aisec.cpg.passes.order.RegisterExtraPass
 import de.fraunhofer.aisec.cpg.passes.scopes.ScopeManager
@@ -39,14 +41,18 @@ import java.io.File
 import java.io.FileOutputStream
 
 @SupportsParallelParsing(false)
+@RegisterExtraPass(ResolveGoEmbeddedMembers::class)
 @RegisterExtraPass(ResolveGoInterfaceImplementations::class)
+@RegisterExtraPass(FunctionPointerCallResolver::class)
 class GoLanguageFrontend(
     language: Language<GoLanguageFrontend>,
     config: TranslationConfiguration,
     scopeManager: ScopeManager
 ) : LanguageFrontend(language, config, scopeManager) {
+
     companion object {
         @JvmField var GOLANG_EXTENSIONS: List<String> = listOf(".go")
+        var activeTranslationUnits = mutableMapOf<String, TranslationUnitDeclaration>()
 
         init {
             try {
@@ -82,6 +88,15 @@ class GoLanguageFrontend(
                 )
             }
         }
+    }
+
+    fun addActiveTranslationUnit(fname: String, tu: TranslationUnitDeclaration) {
+        activeTranslationUnits.set(fname, tu)
+    }
+
+    fun getActiveTranslationUnit(fname: String): TranslationUnitDeclaration? {
+        val u = activeTranslationUnits.get(fname)
+        return u
     }
 
     @Throws(TranslationException::class)

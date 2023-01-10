@@ -277,7 +277,8 @@ public class StatementHandler
                 statement.setCondition(
                     (Expression) frontend.getExpressionHandler().handle(condition)));
 
-    // Adds true expression node where default empty condition evaluates to true, remove here and in
+    // Adds true expression node where default empty condition evaluates to true,
+    // remove here and in
     // cpp StatementHandler
     if (statement.getCondition() == null) {
       Literal<?> literal = newLiteral(this, true, parseType(this, "boolean"), "true");
@@ -427,11 +428,14 @@ public class StatementHandler
     if (caseExpression == null) {
       if (optionalTokenRange.isPresent()) {
         /*
-        TODO: not sure if this is really necessary, it seems to be the same location as
-         parentLocation, except that column starts 1 character later and I am not sure if
-         this is correct anyway
-        */
-        // Compute region and code for self generated default statement to match the c++ versions
+         * TODO: not sure if this is really necessary, it seems to be the same location
+         * as
+         * parentLocation, except that column starts 1 character later and I am not sure
+         * if
+         * this is correct anyway
+         */
+        // Compute region and code for self generated default statement to match the c++
+        // versions
 
         caseTokens =
             new Pair<>(
@@ -448,7 +452,8 @@ public class StatementHandler
 
     Optional<TokenRange> caseExprTokenRange = caseExpression.getTokenRange();
     if (optionalTokenRange.isPresent() && caseExprTokenRange.isPresent()) {
-      // Compute region and code for self generated case statement to match the c++ versions
+      // Compute region and code for self generated case statement to match the c++
+      // versions
       caseTokens =
           new Pair<>(
               getPreviousTokenWith("case", optionalTokenRange.get().getBegin()),
@@ -538,7 +543,8 @@ public class StatementHandler
     switchStatement.setSelector(
         (Expression) frontend.getExpressionHandler().handle(switchStmt.getSelector()));
 
-    // Compute region and code for self generated compound statement to match the c++ versions
+    // Compute region and code for self generated compound statement to match the
+    // c++ versions
     JavaToken start = null;
     JavaToken end = null;
     Optional<TokenRange> tokenRange = switchStmt.getTokenRange();
@@ -642,7 +648,8 @@ public class StatementHandler
       for (ReferenceType t : ((UnionType) catchCls.getParameter().getType()).getElements()) {
         possibleTypes.add(frontend.getTypeAsGoodAsPossible(t));
       }
-      // we do not know which of the exceptions was actually thrown, so we assume this might be any
+      // we do not know which of the exceptions was actually thrown, so we assume this
+      // might be any
       concreteType = parseType(this, "java.lang.Throwable");
       concreteType.setTypeOrigin(Type.Origin.GUESSED);
     } else {

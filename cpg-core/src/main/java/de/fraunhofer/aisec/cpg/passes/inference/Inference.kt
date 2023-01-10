@@ -59,7 +59,7 @@ class Inference(val start: Node) : LanguageProvider, IsInferredProvider {
         code: String?,
         isStatic: Boolean,
         signature: List<Type?>,
-        returnType: Type?,
+        returnTypes: List<Type?>,
     ): FunctionDeclaration {
         // We assume that the start is either a record or the translation unit
         val record = start as? RecordDeclaration
@@ -96,8 +96,12 @@ class Inference(val start: Node) : LanguageProvider, IsInferredProvider {
 
         // TODO: Once, we used inferred.type = returnType and once the two following statements:
         // Why? What's the "right way"?
-        returnType?.let { inferred.returnTypes = listOf(it) }
-        inferred.type = returnType
+        inferred.returnTypes = returnTypes.filter { it != null } as List<Type>
+        if (returnTypes.size > 1) {
+            inferred.type = TupleType(returnTypes.filter { it != null } as List<Type>)
+        } else if (returnTypes.size == 1) {
+            inferred.type = returnTypes.first()
+        }
 
         // TODO: Handle multiple return values?
         if (declarationHolder is RecordDeclaration) {
@@ -322,7 +326,7 @@ fun TranslationUnitDeclaration.inferFunction(
             isStatic,
             call.signature,
             // TODO: Is the call's type the return value's type?
-            call.type
+            listOf(call.type)
         )
 }
 
@@ -341,6 +345,6 @@ fun RecordDeclaration.inferMethod(
             isStatic,
             call.signature,
             // TODO: Is the call's type the return value's type?
-            call.type
+            listOf(call.type)
         ) as MethodDeclaration
 }

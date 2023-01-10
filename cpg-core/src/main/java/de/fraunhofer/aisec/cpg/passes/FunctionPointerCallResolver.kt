@@ -36,12 +36,10 @@ import de.fraunhofer.aisec.cpg.graph.declarations.ValueDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.MemberCallExpression
 import de.fraunhofer.aisec.cpg.graph.types.FunctionPointerType
-import de.fraunhofer.aisec.cpg.graph.types.IncompleteType
-import de.fraunhofer.aisec.cpg.graph.types.Type
+import de.fraunhofer.aisec.cpg.graph.types.FunctionType
 import de.fraunhofer.aisec.cpg.helpers.IdentitySet
 import de.fraunhofer.aisec.cpg.helpers.SubgraphWalker.ScopedWalker
 import de.fraunhofer.aisec.cpg.passes.order.DependsOn
-import de.fraunhofer.aisec.cpg.passes.order.RequiredFrontend
 import java.util.*
 import java.util.function.Consumer
 
@@ -58,7 +56,6 @@ import java.util.function.Consumer
  */
 @DependsOn(CallResolver::class)
 @DependsOn(DFGPass::class)
-@RequiredFrontend(CXXLanguageFrontend::class)
 class FunctionPointerCallResolver : Pass() {
     private lateinit var walker: ScopedWalker
     private var inferDfgForUnresolvedCalls = false
@@ -90,16 +87,21 @@ class FunctionPointerCallResolver : Pass() {
      * been omitted: fp(). Looks like a normal call, but it isn't.
      */
     private fun handleCallExpression(call: CallExpression) {
+        log.info("Handling call expression: " + call.name)
+
         // Since we are using a scoped walker, we can access the current scope here and try to
         // resolve the call expression to a declaration that contains the pointer.
         val pointer =
             scopeManager
                 .resolve<ValueDeclaration>(scopeManager.currentScope, true) {
-                    it.type is FunctionPointerType && it.name == call.name
+                    (it.type is FunctionPointerType || it.type is FunctionType) &&
+                        it.name == call.name
                 }
                 ?.firstOrNull()
         if (pointer != null) {
             handleFunctionPointerCall(call, pointer)
+        } else {
+            log.info("No pointer")
         }
     }
 
@@ -115,7 +117,21 @@ class FunctionPointerCallResolver : Pass() {
     }
 
     private fun handleFunctionPointerCall(call: CallExpression, pointer: Node?) {
-        val pointerType = (pointer as HasType).type as FunctionPointerType
+        if (pointer !is HasType) return
+
+        val pointerType =
+            if (pointer.type is FunctionPointerType) {
+                pointer.type as FunctionPointerType
+            } else if (pointer.type is FunctionType) {
+                (pointer.type as FunctionType).reference(null) as FunctionPointerType
+            } else {
+                null
+            }
+
+        if (pointerType == null) return
+
+        log.info("Handling function pointer call: " + call.code)
+
         val invocationCandidates: MutableList<FunctionDeclaration> = ArrayList()
         val work: Deque<Node> = ArrayDeque()
         val seen = IdentitySet<Node>()
@@ -127,23 +143,15 @@ class FunctionPointerCallResolver : Pass() {
             }
 
             if (curr is FunctionDeclaration) {
-                // Even if it is a function declaration, the dataflow might just come from a
-                // situation where the target of a fptr is passed through via a return value. Keep
-                // searching if return type or signature don't match
-
-                // In some languages, there might be no explicit return type. In this case we are
-                // using a single void return type.
-                val returnType: Type =
-                    if (curr.returnTypes.isEmpty()) {
-                        IncompleteType()
-                    } else {
-                        // TODO(oxisto): support multiple return types
-                        curr.returnTypes[0]
-                    }
                 if (
-                    TypeManager.getInstance()
-                        .isSupertypeOf(pointerType.returnType, returnType, call) &&
-                        curr.hasSignature(pointerType.parameters)
+                    curr.returnTypes.size == pointerType.returnTypes.size &&
+                        curr.returnTypes
+                            .filterIndexed { i, it ->
+                                !TypeManager.getInstance()
+                                    .isSupertypeOf(pointerType.returnTypes[i], it, call) &&
+                                    curr.hasSignature(pointerType.parameters)
+                            }
+                            .isEmpty()
                 ) {
                     invocationCandidates.add(curr)
                     // We have found a target. Don't follow this path any further, but still

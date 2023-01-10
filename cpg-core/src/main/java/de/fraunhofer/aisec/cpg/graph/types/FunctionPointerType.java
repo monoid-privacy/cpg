@@ -44,14 +44,14 @@ public class FunctionPointerType extends Type {
   @Relationship(value = "PARAMETERS", direction = "OUTGOING")
   private List<PropertyEdge<Type>> parameters;
 
-  private Type returnType;
+  private List<Type> returnTypes = new ArrayList<Type>();
 
   public void setParameters(List<Type> parameters) {
     this.parameters = PropertyEdge.transformIntoOutgoingPropertyEdgeList(parameters, this);
   }
 
-  public void setReturnType(Type returnType) {
-    this.returnType = returnType;
+  public void setReturnTypes(List<Type> returnTypes) {
+    this.returnTypes = returnTypes;
   }
 
   private FunctionPointerType() {}
@@ -60,22 +60,22 @@ public class FunctionPointerType extends Type {
       Type.Qualifier qualifier,
       Type.Storage storage,
       List<Type> parameters,
-      Type returnType,
+      List<Type> returnTypes,
       Language<? extends LanguageFrontend> language) {
     super("", storage, qualifier);
     this.parameters = PropertyEdge.transformIntoOutgoingPropertyEdgeList(parameters, this);
-    this.returnType = returnType;
+    this.returnTypes = returnTypes;
     this.setLanguage(language);
   }
 
   public FunctionPointerType(
       Type type,
       List<Type> parameters,
-      Type returnType,
+      List<Type> returnTypes,
       Language<? extends LanguageFrontend> language) {
     super(type);
     this.parameters = PropertyEdge.transformIntoOutgoingPropertyEdgeList(parameters, this);
-    this.returnType = returnType;
+    this.returnTypes = returnTypes;
     this.setLanguage(language);
   }
 
@@ -87,8 +87,8 @@ public class FunctionPointerType extends Type {
     return unwrap(this.parameters);
   }
 
-  public Type getReturnType() {
-    return returnType;
+  public List<Type> getReturnTypes() {
+    return returnTypes;
   }
 
   @Override
@@ -104,20 +104,15 @@ public class FunctionPointerType extends Type {
   @Override
   public Type duplicate() {
     List<Type> copiedParameters = new ArrayList<>(unwrap(this.parameters));
-    return new FunctionPointerType(this, copiedParameters, this.returnType, this.getLanguage());
+    List<Type> copiedReturnTypes = new ArrayList<>(this.returnTypes);
+    return new FunctionPointerType(this, copiedParameters, copiedReturnTypes, this.getLanguage());
   }
 
   @Override
   public boolean isSimilar(Type t) {
     if (t instanceof FunctionPointerType) {
-      if (returnType == null || ((FunctionPointerType) t).returnType == null) {
-        return this.parameters.equals(((FunctionPointerType) t).parameters)
-            && (this.returnType == ((FunctionPointerType) t).returnType
-                || returnType == ((FunctionPointerType) t).getReturnType());
-      }
       return this.parameters.equals(((FunctionPointerType) t).parameters)
-          && (this.returnType == ((FunctionPointerType) t).returnType
-              || this.returnType.equals(((FunctionPointerType) t).returnType));
+          && (this.returnTypes.equals(((FunctionPointerType) t).returnTypes));
     }
     return false;
   }
@@ -130,12 +125,12 @@ public class FunctionPointerType extends Type {
     FunctionPointerType that = (FunctionPointerType) o;
     return Objects.equals(this.getParameters(), that.getParameters())
         && PropertyEdge.propertyEqualsList(parameters, that.parameters)
-        && Objects.equals(returnType, that.returnType);
+        && Objects.equals(returnTypes, that.returnTypes);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(super.hashCode(), parameters, returnType);
+    return Objects.hash(super.hashCode(), parameters, returnTypes);
   }
 
   @NotNull
@@ -145,7 +140,7 @@ public class FunctionPointerType extends Type {
         + "parameters="
         + getParameters()
         + ", returnType="
-        + returnType
+        + returnTypes
         + ", typeName='"
         + getName()
         + '\''

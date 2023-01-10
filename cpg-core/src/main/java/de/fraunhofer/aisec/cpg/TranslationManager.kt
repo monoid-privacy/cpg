@@ -97,6 +97,8 @@ private constructor(
                     if (pass.runsWithCurrentFrontend(executedFrontends)) {
                         executedPasses.add(pass)
                         pass.accept(result)
+                    } else {
+                        log.info("Doesnt run with frontend")
                     }
                     bench.addMeasurement()
                     if (result.isCancelled) {

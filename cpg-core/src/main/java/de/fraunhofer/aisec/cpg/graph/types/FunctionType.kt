@@ -64,7 +64,7 @@ class FunctionType : Type {
             qualifier,
             storage,
             parameters.toList(),
-            returnTypes.first(),
+            returnTypes.toList(),
             language
         )
     }

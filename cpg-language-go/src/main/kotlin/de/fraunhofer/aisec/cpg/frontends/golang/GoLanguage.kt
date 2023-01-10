@@ -33,6 +33,7 @@ import de.fraunhofer.aisec.cpg.frontends.HasShortCircuitOperators
 import de.fraunhofer.aisec.cpg.graph.declarations.*
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.MemberCallExpression
+import de.fraunhofer.aisec.cpg.graph.types.PointerType
 import de.fraunhofer.aisec.cpg.graph.types.Type
 import de.fraunhofer.aisec.cpg.passes.CallResolver
 import de.fraunhofer.aisec.cpg.passes.scopes.NameScope
@@ -76,12 +77,25 @@ open class GoLanguage :
         currentTU: TranslationUnitDeclaration,
         callResolver: CallResolver
     ): List<FunctionDeclaration> {
-        log.info("Refining method call: " + call.name)
+        log.info(
+            "Refining method call: " +
+                call.name +
+                " " +
+                call.code +
+                " " +
+                call.arguments.size +
+                " " +
+                call.signature.size
+        )
         var invocationCandidates = mutableListOf<FunctionDeclaration>()
         val records =
             possibleContainingTypes.mapNotNull { callResolver.recordMap[it.root.typeName] }.toSet()
 
-        log.info("Possible records: " + records.size + "  " + possibleContainingTypes.size)
+        log.info(
+            "Possible records: " + records.size + "  " + possibleContainingTypes
+            // " " +
+            // callResolver.recordMap
+            )
 
         for (record in records) {
             invocationCandidates.addAll(
@@ -100,19 +114,79 @@ open class GoLanguage :
         return invocationCandidates
     }
 
+    fun refineEmbeddedInvocationCandidatesFromRecord(
+        recordDeclaration: RecordDeclaration,
+        call: CallExpression,
+        namePattern: Pattern,
+        callResolver: CallResolver
+    ): List<FunctionDeclaration> {
+        val embField =
+            recordDeclaration.fields
+                .filter { it.isEmbeddedField() }
+                .mapNotNull {
+                    callResolver.recordMap[
+                            if (it.type is PointerType)
+                                (it.type as PointerType).elementType.typeName
+                            else it.type.typeName
+                        ]
+                }
+                .filter {
+                    it.methods
+                        .filter { m ->
+                            namePattern.matcher(m.name).matches() && m.hasSignature(call.signature)
+                        }
+                        .size != 0
+                }
+                .firstOrNull()
+
+        if (embField == null) {
+            return mutableListOf<FunctionDeclaration>()
+        }
+
+        return refineInvocationCandidatesFromRecord(embField, call, namePattern, callResolver)
+    }
+
     override fun refineInvocationCandidatesFromRecord(
         recordDeclaration: RecordDeclaration,
         call: CallExpression,
-        namePattern: Pattern
+        namePattern: Pattern,
+        callResolver: CallResolver
     ): List<FunctionDeclaration> {
-        val invocationCandidate =
+        log.info("Refining..." + " " + recordDeclaration.name)
+        var invocationCandidate =
             mutableListOf<FunctionDeclaration>(
                 *recordDeclaration.methods
                     .filter { m ->
+                        if (recordDeclaration.name.contains("DockerMonoidProtocol")) {
+                            log.info("Method: " + m.name + " " + m.signature)
+                        }
                         namePattern.matcher(m.name).matches() && m.hasSignature(call.signature)
                     }
                     .toTypedArray()
             )
+
+        if (invocationCandidate.isEmpty()) {
+            invocationCandidate =
+                mutableListOf<FunctionDeclaration>(
+                    *recordDeclaration.fields
+                        .filter { it.isEmbeddedField() }
+                        .mapNotNull {
+                            callResolver.recordMap[
+                                    if (it.type is PointerType)
+                                        (it.type as PointerType).elementType.typeName
+                                    else it.type.typeName
+                                ]
+                        }
+                        .flatMap { it.methods }
+                        .filter { m ->
+                            if (call.name.contains("copyFile")) {
+                                log.info("Method: " + m.name + " " + m.signature)
+                            }
+                            namePattern.matcher(m.name).matches() && m.hasSignature(call.signature)
+                        }
+                        .toTypedArray()
+                )
+        }
 
         return invocationCandidate
     }
@@ -122,7 +196,6 @@ open class GoLanguage :
         scopeManager: ScopeManager,
         currentTU: TranslationUnitDeclaration
     ) {
-        log.info("Refining normal call2: " + call.name)
         val invocationCandidates = scopeManager.resolveFunction(call)
 
         call.invokes = invocationCandidates

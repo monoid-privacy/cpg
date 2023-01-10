@@ -33,6 +33,7 @@ import de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.CompoundStatement
+import de.fraunhofer.aisec.cpg.graph.statements.DeclarationStatement
 import de.fraunhofer.aisec.cpg.graph.statements.ForEachStatement
 import de.fraunhofer.aisec.cpg.graph.statements.ReturnStatement
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.*
@@ -150,12 +151,9 @@ class DFGPass : Pass() {
      * the function.
      */
     private fun handleVariableDeclaration(node: VariableDeclaration) {
-        log.info("Handle variable decl: " + node.name)
         val ni = node.initializer
 
-        if (ni == null) {
-            log.info("Null initializer")
-        } else {
+        if (ni != null) {
             node.addPrevDFG(ni)
         }
 
@@ -199,7 +197,15 @@ class DFGPass : Pass() {
      * [ForEachStatement.iterable] to the [ForEachStatement.variable].
      */
     private fun handleForEachStatement(node: ForEachStatement) {
-        node.variable.addPrevDFG(node.iterable)
+        for (v in node.getVariables()) {
+            if (v is DeclarationStatement) {
+                for (d in v.getDeclarations()) {
+                    d.addPrevDFG(node.iterable)
+                }
+            } else {
+                v.addPrevDFG(node.iterable)
+            }
+        }
     }
 
     /**
@@ -220,6 +226,7 @@ class DFGPass : Pass() {
      * lambda to the expression.
      */
     private fun handleLambdaExpression(node: LambdaExpression) {
+        log.info("Handle lambda expression")
         node.function?.let { node.addPrevDFG(it) }
     }
 

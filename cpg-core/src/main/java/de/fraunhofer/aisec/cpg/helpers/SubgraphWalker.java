@@ -56,14 +56,11 @@ public class SubgraphWalker {
   private static final HashMap<String, List<Field>> fieldCache = new HashMap<>();
 
   // hide ctor
-  private SubgraphWalker() {
-  }
+  private SubgraphWalker() {}
 
   /**
-   * Returns all the fields for a specific class type. Because this information is
-   * static during
-   * runtime, we do cache this information in {@link #fieldCache} for performance
-   * reasons.
+   * Returns all the fields for a specific class type. Because this information is static during
+   * runtime, we do cache this information in {@link #fieldCache} for performance reasons.
    *
    * @param classType the class type
    * @return its fields, including the ones from its superclass
@@ -92,25 +89,19 @@ public class SubgraphWalker {
   }
 
   /**
-   * Retrieves a list of AST children of the specified node by iterating all
-   * fields that are
+   * Retrieves a list of AST children of the specified node by iterating all fields that are
    * annotated with the {@link SubGraph} annotation and its value "AST".
    *
-   * <p>
-   * Please note, that you SHOULD NOT call this directly in a recursive function,
-   * since the AST
-   * might have loops and you will probably run into a {@link StackOverflowError}.
-   * Therefore, use of
-   * {@link Node#accept} with the {@link Strategy#AST_FORWARD(Node)} is
-   * encouraged.
+   * <p>Please note, that you SHOULD NOT call this directly in a recursive function, since the AST
+   * might have loops and you will probably run into a {@link StackOverflowError}. Therefore, use of
+   * {@link Node#accept} with the {@link Strategy#AST_FORWARD(Node)} is encouraged.
    *
    * @param node the start node
    * @return a list of children from the node's AST
    */
   public static List<Node> getAstChildren(Node node) {
     var children = new ArrayList<Node>();
-    if (node == null)
-      return children;
+    if (node == null) return children;
 
     Class<?> classType = node.getClass();
 
@@ -193,31 +184,30 @@ public class SubgraphWalker {
   }
 
   /**
-   * Function returns two lists in a list. The first list contains all eog nodes
-   * with no predecesor
-   * in the subgraph with root 'n'. The second list contains eog edges that have
-   * no successor in the
-   * subgraph with root 'n'. The first List marks the entry and the second marks
-   * the exit nodes of
+   * Function returns two lists in a list. The first list contains all eog nodes with no predecesor
+   * in the subgraph with root 'n'. The second list contains eog edges that have no successor in the
+   * subgraph with root 'n'. The first List marks the entry and the second marks the exit nodes of
    * the cfg in this subgraph.
    *
    * @param n - root of the subgraph.
-   * @return Two lists, list 1 contains all eog entries and list 2 contains all
-   *         exits.
+   * @return Two lists, list 1 contains all eog entries and list 2 contains all exits.
    */
   public static Border getEOGPathEdges(Node n) {
     Border border = new Border();
     List<Node> flattedASTTree = flattenAST(n);
-    List<Node> eogNodes = flattedASTTree.stream()
-        .filter(node -> !node.getPrevEOG().isEmpty() || !node.getNextEOG().isEmpty())
-        .collect(Collectors.toList());
+    List<Node> eogNodes =
+        flattedASTTree.stream()
+            .filter(node -> !node.getPrevEOG().isEmpty() || !node.getNextEOG().isEmpty())
+            .collect(Collectors.toList());
     // Nodes that are incoming edges, no other node
-    border.entries = eogNodes.stream()
-        .filter(node -> node.getPrevEOG().stream().anyMatch(prev -> !eogNodes.contains(prev)))
-        .collect(Collectors.toList());
-    border.exits = eogNodes.stream()
-        .filter(node -> node.getNextEOG().stream().anyMatch(next -> !eogNodes.contains(next)))
-        .collect(Collectors.toList());
+    border.entries =
+        eogNodes.stream()
+            .filter(node -> node.getPrevEOG().stream().anyMatch(prev -> !eogNodes.contains(prev)))
+            .collect(Collectors.toList());
+    border.exits =
+        eogNodes.stream()
+            .filter(node -> node.getNextEOG().stream().anyMatch(next -> !eogNodes.contains(next)))
+            .collect(Collectors.toList());
     return border;
   }
 
@@ -236,10 +226,8 @@ public class SubgraphWalker {
   }
 
   /**
-   * For better readability: <code>result.entries</code> instead of
-   * <code>result.get(0)</code> when
-   * working with getEOGPathEdges. Can be used for all subgraphs in subgraphs,
-   * e.g. AST entries and
+   * For better readability: <code>result.entries</code> instead of <code>result.get(0)</code> when
+   * working with getEOGPathEdges. Can be used for all subgraphs in subgraphs, e.g. AST entries and
    * exits in a EOG subgraph, EOG entries and exits in a CFG subgraph.
    */
   public static class Border {
@@ -261,10 +249,8 @@ public class SubgraphWalker {
     private Deque<Node> backlog;
 
     /**
-     * This callback is triggered whenever a new node is visited for the first time.
-     * This is the
-     * place where usual graph manipulation will happen. The current node is the
-     * single argument
+     * This callback is triggered whenever a new node is visited for the first time. This is the
+     * place where usual graph manipulation will happen. The current node is the single argument
      * passed to the function
      */
     private final List<Consumer<Node>> onNodeVisit = new ArrayList<>();
@@ -272,44 +258,30 @@ public class SubgraphWalker {
     private final List<BiConsumer<Node, Node>> onNodeVisit2 = new ArrayList<>();
 
     /**
-     * The callback that is designed to tell the user when we leave the current
-     * scope. The exited
-     * node is passed as an argument to the callback function. Consider the
-     * following AST:
+     * The callback that is designed to tell the user when we leave the current scope. The exited
+     * node is passed as an argument to the callback function. Consider the following AST:
      *
-     * <p>
-     * .........(1) parent
+     * <p>.........(1) parent
      *
-     * <p>
-     * ........./........\
+     * <p>........./........\
      *
-     * <p>
-     * (2) child1....(4) child2
+     * <p>(2) child1....(4) child2
      *
-     * <p>
-     * ........|
+     * <p>........|
      *
-     * <p>
-     * (3) subchild
+     * <p>(3) subchild
      *
-     * <p>
-     * Once "parent" has been visited, we continue descending into its children.
-     * First into
-     * "child1", followed by "subchild". Once we are done there, we return to
-     * "child1". At this
-     * point, the exit handler notifies the user that "subchild" is being exited.
-     * Afterwards we exit
-     * "child1", and after "child2" is done, "parent" is exited. This callback is
-     * important for
-     * tracking declaration scopes, as e.g. anything declared in "child1" is also
-     * visible to
+     * <p>Once "parent" has been visited, we continue descending into its children. First into
+     * "child1", followed by "subchild". Once we are done there, we return to "child1". At this
+     * point, the exit handler notifies the user that "subchild" is being exited. Afterwards we exit
+     * "child1", and after "child2" is done, "parent" is exited. This callback is important for
+     * tracking declaration scopes, as e.g. anything declared in "child1" is also visible to
      * "subchild", but not to "child2".
      */
     private final List<Consumer<Node>> onScopeExit = new ArrayList<>();
 
     /**
-     * The core iterative AST traversal algorithm: In a depth-first way we descend
-     * into the tree,
+     * The core iterative AST traversal algorithm: In a depth-first way we descend into the tree,
      * providing callbacks for graph modification.
      *
      * @param root The node where we should start
@@ -335,9 +307,10 @@ public class SubgraphWalker {
           onNodeVisit.forEach(c -> c.accept(current));
           onNodeVisit2.forEach(c -> c.accept(current, parent));
 
-          var unseenChildren = SubgraphWalker.getAstChildren(current).stream()
-              .filter(Predicate.not(seen::contains))
-              .collect(Collectors.toList());
+          var unseenChildren =
+              SubgraphWalker.getAstChildren(current).stream()
+                  .filter(Predicate.not(seen::contains))
+                  .collect(Collectors.toList());
           seen.addAll(unseenChildren);
           Util.reverse(unseenChildren.stream())
               .forEach(child -> todo.push(new kotlin.Pair<>(child, current)));
@@ -374,23 +347,19 @@ public class SubgraphWalker {
   }
 
   /**
-   * Handles declaration scope monitoring for iterative traversals. If this is not
-   * required, use
+   * Handles declaration scope monitoring for iterative traversals. If this is not required, use
    * {@link IterativeGraphWalker} for less overhead.
    *
-   * <p>
-   * Declaration scopes are similar to
-   * {@link de.fraunhofer.aisec.cpg.passes.scopes.ScopeManager}
-   * scopes: {@link ValueDeclaration}s located inside a scope (i.e. are children
-   * of the scope root)
-   * are visible to any children of the scope root. Scopes can be layered, where
-   * declarations from
+   * <p>Declaration scopes are similar to {@link de.fraunhofer.aisec.cpg.passes.scopes.ScopeManager}
+   * scopes: {@link ValueDeclaration}s located inside a scope (i.e. are children of the scope root)
+   * are visible to any children of the scope root. Scopes can be layered, where declarations from
    * parent scopes are visible to the children but not the other way around.
    */
   public static class ScopedWalker {
 
     // declarationScope -> (parentScope, declarations)
-    private final Map<Node, Pair<Node, List<ValueDeclaration>>> nodeToParentBlockAndContainedValueDeclarations = new IdentityHashMap<>();
+    private final Map<Node, Pair<Node, List<ValueDeclaration>>>
+        nodeToParentBlockAndContainedValueDeclarations = new IdentityHashMap<>();
     private final Deque<RecordDeclaration> currentClass = new ArrayDeque<>();
     private IterativeGraphWalker walker;
 
@@ -405,12 +374,9 @@ public class SubgraphWalker {
     }
 
     /**
-     * Callback function(s) getting three arguments: the type of the class we're
-     * currently in, the
-     * root node of the current declaration scope, the currently visited node. The
-     * declaration scope
-     * root can be passed to {@link ScopedWalker#getAllDeclarationsForScope} in
-     * order to retrieve
+     * Callback function(s) getting three arguments: the type of the class we're currently in, the
+     * root node of the current declaration scope, the currently visited node. The declaration scope
+     * root can be passed to {@link ScopedWalker#getAllDeclarationsForScope} in order to retrieve
      * the currently available declarations.
      */
     private final List<TriConsumer<RecordDeclaration, Node, Node>> handlers = new ArrayList<>();
@@ -446,7 +412,8 @@ public class SubgraphWalker {
 
       if (current instanceof RecordDeclaration && current != currentClass.peek()) {
         currentClass.push(
-            (RecordDeclaration) current); // we can be in an inner class, so we remember this as a stack
+            (RecordDeclaration)
+                current); // we can be in an inner class, so we remember this as a stack
       }
 
       // TODO: actually we should not handle this in handleNode but have something
@@ -473,8 +440,7 @@ public class SubgraphWalker {
     }
 
     /**
-     * Deprecated because this is MAJORLY broken in scenarios where we have external
-     * method
+     * Deprecated because this is MAJORLY broken in scenarios where we have external method
      * declarations, such as in CXX.
      */
     @Nullable
@@ -523,7 +489,8 @@ public class SubgraphWalker {
       // get all declarations from the current scope and all its parent scopes
       while (currentScope != null
           && nodeToParentBlockAndContainedValueDeclarations.containsKey(scope)) {
-        Pair<Node, List<ValueDeclaration>> entry = nodeToParentBlockAndContainedValueDeclarations.get(currentScope);
+        Pair<Node, List<ValueDeclaration>> entry =
+            nodeToParentBlockAndContainedValueDeclarations.get(currentScope);
         for (ValueDeclaration val : entry.getRight()) {
           // make sure that we only add the variable for the current scope.
           // if the var is already added, all outside vars with this name are shadowed
@@ -553,7 +520,8 @@ public class SubgraphWalker {
       // iterate all declarations from the current scope and all its parent scopes
       while (currentScope != null
           && nodeToParentBlockAndContainedValueDeclarations.containsKey(scope)) {
-        Pair<Node, List<ValueDeclaration>> entry = nodeToParentBlockAndContainedValueDeclarations.get(currentScope);
+        Pair<Node, List<ValueDeclaration>> entry =
+            nodeToParentBlockAndContainedValueDeclarations.get(currentScope);
         for (ValueDeclaration val : entry.getRight()) {
           if (predicate.test(val)) {
             return Optional.of(val);

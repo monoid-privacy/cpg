@@ -848,8 +848,9 @@ open class EvaluationOrderGraphPass : Pass() {
     protected fun handleForEachStatement(node: ForEachStatement) {
         scopeManager.enterScope(node)
         createEOG(node.iterable)
-        createEOG(node.variable)
-        node.addPrevDFG(node.variable)
+        for (v in node.getVariables()) {
+            createEOG(v)
+        }
         pushToEOG(node) // To have semantic information after the variable declaration
         currentProperties[Properties.BRANCH] = true
         val tmpEOGNodes = ArrayList(currentEOG)

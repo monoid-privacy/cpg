@@ -38,6 +38,8 @@ import de.fraunhofer.aisec.cpg.graph.declarations.TranslationUnitDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.Expression
 import de.fraunhofer.aisec.cpg.graph.types.*
 import de.fraunhofer.aisec.cpg.helpers.Benchmark
+import de.fraunhofer.aisec.cpg.passes.FunctionPointerCallResolver
+import de.fraunhofer.aisec.cpg.passes.order.RegisterExtraPass
 import de.fraunhofer.aisec.cpg.passes.scopes.ScopeManager
 import de.fraunhofer.aisec.cpg.sarif.PhysicalLocation
 import de.fraunhofer.aisec.cpg.sarif.Region
@@ -74,6 +76,7 @@ import org.slf4j.LoggerFactory
  * ad [GPPLanguage]). This enables us (to some degree) to deal with the finer difference between C
  * and C++ code.
  */
+@RegisterExtraPass(FunctionPointerCallResolver::class)
 class CXXLanguageFrontend(
     language: Language<CXXLanguageFrontend>,
     config: TranslationConfiguration,

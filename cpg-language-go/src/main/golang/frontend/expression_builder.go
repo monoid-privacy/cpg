@@ -87,6 +87,10 @@ func (frontend *GoLanguageFrontend) NewInitializerListExpression(fset *token.Fil
 	return (*cpg.InitializerListExpression)(frontend.NewExpression("InitializerListExpression", fset, astNode))
 }
 
+func (frontend *GoLanguageFrontend) NewLambdaExpression(fset *token.FileSet, astNode ast.Node) *cpg.LambdaExpression {
+	return (*cpg.LambdaExpression)(frontend.NewExpression("LambdaExpression", fset, astNode))
+}
+
 func (frontend *GoLanguageFrontend) NewBinaryOperator(fset *token.FileSet, astNode ast.Node, opCode string) *cpg.BinaryOperator {
 	return (*cpg.BinaryOperator)(frontend.NewExpression("BinaryOperator", fset, astNode,
 		cpg.NewString(opCode),
