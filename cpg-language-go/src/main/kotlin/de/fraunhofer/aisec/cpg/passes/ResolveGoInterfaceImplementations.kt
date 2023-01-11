@@ -145,15 +145,6 @@ class ResolveGoInterfaceImplementations : SymbolResolverPass() {
 
     override fun accept(t: TranslationResult) {
         scopeManager = t.scopeManager
-        // val sc =
-        //     scopeManager.filterScopes { s ->
-        //         s.scopedName == "github.com/monoid-privacy/monoid/tartools" && s is NameScope
-        //     }
-        // log.info("SC len: " + sc.size)
-
-        // for (v in (sc[0] as NameScope).valueDeclarations) {
-        //     log.info("Scope: " + v.name)
-        // }
 
         walker = ScopedWalker(t.scopeManager)
         walker.registerHandler { _, _, currNode -> walker.collectDeclarations(currNode) }

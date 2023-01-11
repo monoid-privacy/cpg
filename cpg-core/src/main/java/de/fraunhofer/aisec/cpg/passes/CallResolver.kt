@@ -172,8 +172,6 @@ open class CallResolver : SymbolResolverPass() {
     }
 
     private fun handleCallExpression(curClass: RecordDeclaration?, call: CallExpression) {
-        log.info("cFQN: " + call.fqn + " " + call.code)
-
         if (
             call.base is DeclaredReferenceExpression &&
                 isSuperclassReference(call.base as DeclaredReferenceExpression)
@@ -183,7 +181,6 @@ open class CallResolver : SymbolResolverPass() {
         }
 
         if (call is MemberCallExpression) {
-            log.info("Is member call expression")
             val member = call.member
             if (!(member is HasType && (member as HasType).type is FunctionPointerType)) {
                 // function pointers are handled by extra pass
@@ -210,7 +207,6 @@ open class CallResolver : SymbolResolverPass() {
                 (v.type is FunctionPointerType || v.type is FunctionType) && v.name == call.name
             }
         if (!funcPointer.isPresent) {
-            log.info("Handling normal: " + call.fqn)
             // function pointers are handled by extra pass
             handleNormalCalls(curClass, call)
         }
@@ -299,12 +295,6 @@ open class CallResolver : SymbolResolverPass() {
             }
         }
 
-        if (invocationCandidates.size != 0) {
-            log.info(
-                "FFF: " + invocationCandidates[0].name + " " + invocationCandidates[0].isInferred
-            )
-        }
-
         createMethodDummies(invocationCandidates, possibleContainingTypes, call)
         call.invokes = invocationCandidates
     }
@@ -343,8 +333,6 @@ open class CallResolver : SymbolResolverPass() {
         call: CallExpression
     ) {
         if (invocationCandidates.isEmpty()) {
-            log.info("Registering dummies for: " + call.name + " " + call.code)
-
             possibleContainingTypes
                 .mapNotNull {
                     var record = recordMap[it.root.typeName]
@@ -489,7 +477,6 @@ open class CallResolver : SymbolResolverPass() {
         if (node is MemberCallExpression) {
             val base = node.base!!
             possibleTypes.add(base.type)
-            log.info("T: " + base.type.typeName + " " + base.possibleSubTypes.size)
             possibleTypes.addAll(base.possibleSubTypes)
         } else if (node is StaticCallExpression) {
             if (node.targetRecord != null) {

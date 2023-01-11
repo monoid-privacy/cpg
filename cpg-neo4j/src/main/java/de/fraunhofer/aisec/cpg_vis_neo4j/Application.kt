@@ -29,8 +29,10 @@ import de.fraunhofer.aisec.cpg.*
 import de.fraunhofer.aisec.cpg.frontends.CompilationDatabase.Companion.fromFile
 import de.fraunhofer.aisec.cpg.frontends.golang.GoLanguage
 import de.fraunhofer.aisec.cpg.graph.*
+import de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
+import de.fraunhofer.aisec.cpg.query.dataFlow
 import java.io.File
 import java.net.ConnectException
 import java.nio.file.Paths
@@ -225,15 +227,26 @@ class Application : Callable<Int> {
 
         val filtVars =
             translationResult.components[0].variables.filter { n: VariableDeclaration ->
-                n.name.lowercase() == "email"
+                n.name.lowercase().contains("email")
             }
 
-        for (v in
+        val filtFields =
+            translationResult.components[0].fields.filter { n: FieldDeclaration ->
+                log.info("Field: " + n)
+                n.name.lowercase().contains("email")
+            }
+
+        var externCalls =
             translationResult.components[0].calls.filter { c: CallExpression ->
                 c.invokes.size == 0 ||
                     c.invokes[0].isInferred // && (c.fqn?.startsWith("gorm") ?: false)
-            }) {
-            log.info("N: " + v.invokes.size + " " + v.fqn + " " + v.code)
+            }
+
+        for (v in filtFields) {
+            for (ecall in externCalls) {
+                val qt = dataFlow(v, ecall)
+                log.info("Call: " + ecall.code + " " + qt.value)
+            }
         }
     }
 

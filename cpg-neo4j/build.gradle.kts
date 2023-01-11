@@ -60,4 +60,5 @@ dependencies {
     annotationProcessor(libs.picocli.codegen)
 
     api(project(":cpg-language-go"))
+    api(project(":cpg-analysis"))
 }

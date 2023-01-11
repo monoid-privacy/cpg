@@ -77,25 +77,9 @@ open class GoLanguage :
         currentTU: TranslationUnitDeclaration,
         callResolver: CallResolver
     ): List<FunctionDeclaration> {
-        log.info(
-            "Refining method call: " +
-                call.name +
-                " " +
-                call.code +
-                " " +
-                call.arguments.size +
-                " " +
-                call.signature.size
-        )
         var invocationCandidates = mutableListOf<FunctionDeclaration>()
         val records =
             possibleContainingTypes.mapNotNull { callResolver.recordMap[it.root.typeName] }.toSet()
-
-        log.info(
-            "Possible records: " + records.size + "  " + possibleContainingTypes
-            // " " +
-            // callResolver.recordMap
-            )
 
         for (record in records) {
             invocationCandidates.addAll(
@@ -152,14 +136,10 @@ open class GoLanguage :
         namePattern: Pattern,
         callResolver: CallResolver
     ): List<FunctionDeclaration> {
-        log.info("Refining..." + " " + recordDeclaration.name)
         var invocationCandidate =
             mutableListOf<FunctionDeclaration>(
                 *recordDeclaration.methods
                     .filter { m ->
-                        if (recordDeclaration.name.contains("DockerMonoidProtocol")) {
-                            log.info("Method: " + m.name + " " + m.signature)
-                        }
                         namePattern.matcher(m.name).matches() && m.hasSignature(call.signature)
                     }
                     .toTypedArray()
@@ -179,9 +159,6 @@ open class GoLanguage :
                         }
                         .flatMap { it.methods }
                         .filter { m ->
-                            if (call.name.contains("copyFile")) {
-                                log.info("Method: " + m.name + " " + m.signature)
-                            }
                             namePattern.matcher(m.name).matches() && m.hasSignature(call.signature)
                         }
                         .toTypedArray()

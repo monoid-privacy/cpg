@@ -61,7 +61,7 @@ func (frontend *GoLanguageFrontend) getImportName(spec *ast.ImportSpec) string {
 }
 
 func (frontend *GoLanguageFrontend) ParseModule(topLevel string) (exists bool, err error) {
-	frontend.LogInfo("Looking for a go.mod file in %s", topLevel)
+	frontend.LogDebug("Looking for a go.mod file in %s", topLevel)
 
 	mod := path.Join(topLevel, "go.mod")
 
@@ -286,7 +286,7 @@ func (this *GoLanguageFrontend) addFuncTypeData(f *cpg.FunctionDeclaration, fset
 }
 
 func (this *GoLanguageFrontend) handleFuncLit(fset *token.FileSet, funcLit *ast.FuncLit) *jnigi.ObjectRef {
-	this.LogInfo("Handling func lit: %+v", *funcLit)
+	this.LogDebug("Handling func lit: %+v", *funcLit)
 	var scope = this.GetScopeManager()
 
 	f := this.NewFunctionDeclaration(fset, funcLit, "")
@@ -294,8 +294,6 @@ func (this *GoLanguageFrontend) handleFuncLit(fset *token.FileSet, funcLit *ast.
 	this.addFuncTypeData(f, fset, &ast.FuncDecl{
 		Type: funcLit.Type,
 	})
-
-	this.LogInfo("Parsing function body of %s", (*cpg.Node)(f).GetName())
 
 	if funcLit.Body != nil {
 		// parse body
@@ -398,7 +396,6 @@ func (this *GoLanguageFrontend) handleFuncDecl(fset *token.FileSet, funcDecl *as
 	}
 
 	if record != nil && !record.IsNil() {
-		this.LogInfo("Entering record scope.")
 		scope.EnterScope((*cpg.Node)(record))
 	}
 	// enter scope for function

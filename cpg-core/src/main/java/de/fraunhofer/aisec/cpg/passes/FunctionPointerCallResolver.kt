@@ -87,8 +87,6 @@ class FunctionPointerCallResolver : Pass() {
      * been omitted: fp(). Looks like a normal call, but it isn't.
      */
     private fun handleCallExpression(call: CallExpression) {
-        log.info("Handling call expression: " + call.name)
-
         // Since we are using a scoped walker, we can access the current scope here and try to
         // resolve the call expression to a declaration that contains the pointer.
         val pointer =
@@ -100,8 +98,6 @@ class FunctionPointerCallResolver : Pass() {
                 ?.firstOrNull()
         if (pointer != null) {
             handleFunctionPointerCall(call, pointer)
-        } else {
-            log.info("No pointer")
         }
     }
 

@@ -182,8 +182,6 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 			packageArr = append(packageArr, p)
 		}
 
-		goFrontend.LogInfo("Package map: %+v %+v", packageMap, packageArr)
-
 		parsedPkgs, err := packages.Load(&packages.Config{
 			Fset:  fset,
 			Dir:   rootPath,

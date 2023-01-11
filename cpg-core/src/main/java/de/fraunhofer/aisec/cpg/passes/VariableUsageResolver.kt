@@ -149,8 +149,6 @@ open class VariableUsageResolver : SymbolResolverPass() {
 
             member.addPrevDFG(fieldInit)
         }
-
-        log.info("Initializer list type: " + current.type.typeName)
     }
 
     private fun resolveFunctionPtr(
@@ -456,12 +454,6 @@ open class VariableUsageResolver : SymbolResolverPass() {
                     .filter { it.name == simpleName }
                     .map { it.definition }
                     .firstOrNull()
-
-            if (member == null) {
-                log.info("member not found")
-            }
-        } else if (containingClass !is UnknownType) {
-            log.info("containing class type not in record map: " + containingClass.typeName)
         }
 
         if (member == null) {
@@ -539,7 +531,6 @@ open class VariableUsageResolver : SymbolResolverPass() {
                 .firstOrNull()
 
         if (target != null) {
-            log.info("Resolved an embedded field")
             return target
         }
 

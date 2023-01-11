@@ -127,12 +127,10 @@ abstract class Pass protected constructor() : Consumer<TranslationResult> {
      * [RequiredFrontend]
      */
     fun runsWithCurrentFrontend(usedFrontends: Collection<LanguageFrontend>): Boolean {
-        if (this.javaClass.getAnnotationsByType(RequiredFrontend::class.java).isEmpty()) return true
-        val requiredFrontends = this.javaClass.getAnnotationsByType(RequiredFrontend::class.java)
+        if (!this.javaClass.isAnnotationPresent(RequiredFrontend::class.java)) return true
+        val requiredFrontend = this.javaClass.getAnnotation(RequiredFrontend::class.java).value
         for (used in usedFrontends) {
-            for (f in requiredFrontends) {
-                if (used.javaClass == f.javaClass) return true
-            }
+            if (used.javaClass == requiredFrontend.java) return true
         }
         return false
     }

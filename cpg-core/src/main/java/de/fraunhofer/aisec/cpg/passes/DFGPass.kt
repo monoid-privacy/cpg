@@ -31,6 +31,7 @@ import de.fraunhofer.aisec.cpg.graph.Assignment
 import de.fraunhofer.aisec.cpg.graph.Node
 import de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
+import de.fraunhofer.aisec.cpg.graph.declarations.ValueDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.CompoundStatement
 import de.fraunhofer.aisec.cpg.graph.statements.DeclarationStatement
@@ -57,8 +58,12 @@ class DFGPass : Pass() {
 
         walker.clearCallbacks()
         walker.registerOnNodeVisit { node ->
-            if (node is TupleExpression) handleTupleExpression(node)
+            when (node) {
+                is TupleExpression -> handleTupleExpression(node)
+                is ArraySubscriptionExpression -> resolveArraySubscriptionExpressionRef(node)
+            }
         }
+
         for (tu in tr.translationUnits) {
             walker.iterate(tu)
         }
@@ -226,7 +231,6 @@ class DFGPass : Pass() {
      * lambda to the expression.
      */
     private fun handleLambdaExpression(node: LambdaExpression) {
-        log.info("Handle lambda expression")
         node.function?.let { node.addPrevDFG(it) }
     }
 
@@ -300,7 +304,35 @@ class DFGPass : Pass() {
      * result `x[i]`.
      */
     private fun handleArraySubscriptionExpression(node: ArraySubscriptionExpression) {
+        if (node.arrayExpression == null) return
         node.arrayExpression?.let { node.addPrevDFG(it) }
+    }
+
+    private fun resolveArraySubscriptionExpressionRef(node: ArraySubscriptionExpression) {
+        if (node.arrayExpression == null) return
+
+        if (!node.prevDFG.isEmpty()) {
+            val worklist = mutableListOf<Node>(node.arrayExpression!!)
+            val seen = mutableSetOf<Node>(node)
+
+            while (!worklist.isEmpty()) {
+                val n = worklist.removeLast()
+                if (n in seen) {
+                    continue
+                }
+
+                seen.add(n)
+
+                if (n is ValueDeclaration && n.type == node.arrayExpression!!.type) {
+                    n.addPrevDFG(node)
+                    continue
+                }
+
+                for (ch in n.prevDFG) {
+                    worklist.add(ch)
+                }
+            }
+        }
     }
 
     /**

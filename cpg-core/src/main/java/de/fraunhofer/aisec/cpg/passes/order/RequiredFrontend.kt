@@ -34,5 +34,4 @@ import kotlin.reflect.KClass
  */
 @Retention(AnnotationRetention.RUNTIME)
 @Target(AnnotationTarget.CLASS)
-@Repeatable
 annotation class RequiredFrontend(val value: KClass<out LanguageFrontend>)
