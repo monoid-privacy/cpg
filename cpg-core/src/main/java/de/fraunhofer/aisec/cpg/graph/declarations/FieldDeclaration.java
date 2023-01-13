@@ -62,6 +62,17 @@ public class FieldDeclaration extends ValueDeclaration implements TypeListener, 
    */
   private boolean implicitInitializerAllowed = false;
 
+  @Nullable private RecordDeclaration record;
+
+  public void setRecord(RecordDeclaration r) {
+    LOGGER.info("Setting record: " + r);
+    this.record = r;
+  }
+
+  public RecordDeclaration getRecord() {
+    return this.record;
+  }
+
   public boolean isImplicitInitializerAllowed() {
     return implicitInitializerAllowed;
   }

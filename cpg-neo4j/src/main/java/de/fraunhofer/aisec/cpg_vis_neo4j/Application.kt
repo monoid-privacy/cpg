@@ -29,9 +29,12 @@ import de.fraunhofer.aisec.cpg.*
 import de.fraunhofer.aisec.cpg.frontends.CompilationDatabase.Companion.fromFile
 import de.fraunhofer.aisec.cpg.frontends.golang.GoLanguage
 import de.fraunhofer.aisec.cpg.graph.*
+import de.fraunhofer.aisec.cpg.graph.AccessValues
 import de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration
+import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
+import de.fraunhofer.aisec.cpg.query.QueryTree
 import de.fraunhofer.aisec.cpg.query.dataFlow
 import java.io.File
 import java.net.ConnectException
@@ -204,48 +207,123 @@ class Application : Callable<Int> {
     @Throws(InterruptedException::class, ConnectException::class)
     fun pushToNeo4j(translationResult: TranslationResult) {
         // val bench = Benchmark(this.javaClass, "Push cpg to neo4j", false, translationResult)
-        // log.info("Using import depth: $depth")
-        // log.info(
-        //     "Count base nodes to save: " +
-        //         translationResult.components.size +
-        //         translationResult.additionalNodes.size
-        // )
+        log.info("Using import depth: $depth")
+        log.info(
+            "Count base nodes to save: " +
+                translationResult.components.size +
+                translationResult.additionalNodes.size
+        )
 
-        // val sessionAndSessionFactoryPair = connect()
+        val sessionAndSessionFactoryPair = connect()
 
-        // val session = sessionAndSessionFactoryPair.first
-        // session.beginTransaction().use { transaction ->
-        //     if (!noPurgeDb) session.purgeDatabase()
-        //     session.save(translationResult.components, depth)
-        //     session.save(translationResult.additionalNodes, depth)
-        //     transaction.commit()
-        // }
+        val session = sessionAndSessionFactoryPair.first
+        session.beginTransaction().use { transaction ->
+            if (!noPurgeDb) session.purgeDatabase()
+            session.save(translationResult.components, depth)
+            session.save(translationResult.additionalNodes, depth)
+            transaction.commit()
+        }
 
-        // session.clear()
-        // sessionAndSessionFactoryPair.second.close()
+        session.clear()
+        sessionAndSessionFactoryPair.second.close()
         // bench.addMeasurement()
+    }
 
-        val filtVars =
-            translationResult.components[0].variables.filter { n: VariableDeclaration ->
-                n.name.lowercase().contains("email")
+    fun callPath(from: FunctionDeclaration, to: FunctionDeclaration): Boolean {
+        val worklist = mutableListOf<FunctionDeclaration>(from)
+        val seen = mutableSetOf<FunctionDeclaration>()
+
+        while (!worklist.isEmpty()) {
+            val f = worklist.removeLast()
+
+            if (f in seen) continue
+            seen.add(f)
+
+            if (f == to) {
+                return true
             }
+
+            for (c in f.callees) {
+                worklist.add(c)
+            }
+        }
+
+        return false
+    }
+
+    fun executionPath(from: Node, to: Node): QueryTree<Boolean> {
+        var pred: (Node) -> Boolean = { n -> n == to }
+
+        if (
+            from.containingFunction != to.containingFunction &&
+                to.containingFunction != null &&
+                from.containingFunction != null
+        ) {
+            pred = { n ->
+                if (n is CallExpression) {
+                    n.invokes.any({ fn -> callPath(fn, to.containingFunction!!) })
+                } else {
+                    n == to
+                }
+            }
+        }
+
+        val evalRes = from.followNextEOGEdgesUntilHit(pred)
+        val allPaths = evalRes.fulfilled.map { QueryTree(it) }.toMutableList()
+
+        return QueryTree(
+            evalRes.fulfilled.isNotEmpty(),
+            allPaths.toMutableList(),
+            "executionPath($from, $to)"
+        )
+    }
+
+    fun getSourceNodes(translationResult: TranslationResult): List<Node> {
+        var res = listOf<Node>()
 
         val filtFields =
             translationResult.components[0].fields.filter { n: FieldDeclaration ->
-                log.info("Field: " + n)
                 n.name.lowercase().contains("email")
             }
 
+        res = res + filtFields.flatMap { it.getUsages() }.filter { it.access == AccessValues.READ }
+
+        for (f in filtFields) {
+            log.info("F: " + f + " " + f.record)
+
+            res =
+                res +
+                    translationResult.allChildren<VariableDeclaration>({ v ->
+                        v.type == f.record.toType()
+                    })
+        }
+
+        return res
+    }
+
+    fun runAnalysis(translationResult: TranslationResult) {
         var externCalls =
             translationResult.components[0].calls.filter { c: CallExpression ->
                 c.invokes.size == 0 ||
                     c.invokes[0].isInferred // && (c.fqn?.startsWith("gorm") ?: false)
             }
 
-        for (v in filtFields) {
+        for (v in getSourceNodes(translationResult)) {
+            log.info("Usage: " + v)
+
             for (ecall in externCalls) {
                 val qt = dataFlow(v, ecall)
-                log.info("Call: " + ecall.code + " " + qt.value)
+                if (qt.value) {
+                    log.info("DFG Matched: " + ecall.code)
+
+                    if (executionPath(v, ecall).value) {
+                        log.info("Call: " + ecall.code + " " + qt.value)
+
+                        for (n in (qt.children[0].value as List<Node>)) {
+                            log.info("Node: " + n)
+                        }
+                    }
+                }
             }
         }
     }
@@ -402,6 +480,8 @@ class Application : Callable<Int> {
         if (!noNeo4j) {
             pushToNeo4j(translationResult)
         }
+
+        runAnalysis(translationResult)
 
         val pushTime = System.currentTimeMillis()
         log.info("Benchmark: push code in " + (pushTime - analyzingTime) / S_TO_MS_FACTOR + " s.")

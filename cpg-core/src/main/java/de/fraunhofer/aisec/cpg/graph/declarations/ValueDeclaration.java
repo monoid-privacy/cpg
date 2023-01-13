@@ -87,7 +87,7 @@ public abstract class ValueDeclaration extends Declaration implements HasType {
 
   /** All usages of the variable/field. */
   public List<DeclaredReferenceExpression> getUsages() {
-    return unwrap(usageEdges, false);
+    return unwrap(usageEdges, true);
   }
 
   /** All usages of the variable/field with the access value. */

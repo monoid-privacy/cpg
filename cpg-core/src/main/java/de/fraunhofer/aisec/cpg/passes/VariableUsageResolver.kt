@@ -294,7 +294,6 @@ open class VariableUsageResolver : SymbolResolverPass() {
         if (type.typeName !in subtypes) return
 
         val updateList = subtypes[type.typeName]!!.toList() + current.getPossibleSubTypes()
-        log.info("Found and updating: " + current.code + " " + updateList.size)
 
         current.setPossibleSubTypes(updateList)
     }

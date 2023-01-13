@@ -332,6 +332,7 @@ public class SubgraphWalker {
     }
 
     public void clearCallbacks() {
+      onNodeVisit2.clear();
       onNodeVisit.clear();
       onScopeExit.clear();
     }

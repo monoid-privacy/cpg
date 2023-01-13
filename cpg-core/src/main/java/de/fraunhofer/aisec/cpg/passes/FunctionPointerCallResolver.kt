@@ -92,7 +92,8 @@ class FunctionPointerCallResolver : Pass() {
         val pointer =
             scopeManager
                 .resolve<ValueDeclaration>(scopeManager.currentScope, true) {
-                    (it.type is FunctionPointerType || it.type is FunctionType) &&
+                    (it.type is FunctionPointerType ||
+                        (it.type is FunctionType && it !is FunctionDeclaration)) &&
                         it.name == call.name
                 }
                 ?.firstOrNull()

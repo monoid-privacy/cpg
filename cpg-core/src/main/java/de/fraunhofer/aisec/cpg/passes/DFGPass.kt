@@ -44,6 +44,7 @@ import de.fraunhofer.aisec.cpg.passes.order.DependsOn
 
 /** Adds the DFG edges for various types of nodes. */
 @DependsOn(VariableUsageResolver::class)
+@DependsOn(CallResolver::class)
 class DFGPass : Pass() {
     override fun accept(tr: TranslationResult) {
         val inferDfgForUnresolvedCalls =
@@ -61,6 +62,7 @@ class DFGPass : Pass() {
             when (node) {
                 is TupleExpression -> handleTupleExpression(node)
                 is ArraySubscriptionExpression -> resolveArraySubscriptionExpressionRef(node)
+                is FieldDeclaration -> resolveFieldWrites(node)
             }
         }
 
@@ -104,12 +106,32 @@ class DFGPass : Pass() {
         }
     }
 
+    private fun resolveFieldWrites(node: FieldDeclaration) {
+        val usages =
+            node.usages
+                .filter {
+                    it.access == AccessValues.WRITE &&
+                        it is MemberExpression &&
+                        it.base is DeclaredReferenceExpression
+                }
+                .mapNotNull {
+                    val b = (it as MemberExpression).base
+                    Pair(it, (b as DeclaredReferenceExpression).refersTo)
+                }
+                .filter { (_, it) -> it is VariableDeclaration }
+
+        for ((usg, dec) in usages) {
+            dec?.addPrevDFG(usg)
+        }
+    }
+
     private fun handleTupleExpression(node: TupleExpression) {
         val worklist = mutableListOf<Node>(node)
         val seen = mutableSetOf<Node>()
 
         while (!worklist.isEmpty()) {
             val n = worklist.removeLast()
+
             if (n in seen) {
                 continue
             }

@@ -583,6 +583,8 @@ func (this *GoLanguageFrontend) handleStructTypeSpec(fset *token.FileSet, typeDe
 			f.SetType(t)
 			f.SetIsEmbeddedField(embedded)
 
+			r.AddField(f)
+
 			scope.AddDeclaration((*cpg.Declaration)(f))
 		}
 	}
@@ -745,7 +747,14 @@ func (this *GoLanguageFrontend) handleReturnStmt(fset *token.FileSet, returnStmt
 
 			for _, res := range returnStmt.Results {
 				subE := this.handleExpr(fset, res)
-				tup.AddMember(subE)
+
+				if subE != nil {
+					tup.AddMember(subE)
+				} else {
+					tup.AddMember(
+						this.NewProblemExpression(fset, res, "Could not parse return value"),
+					)
+				}
 			}
 
 			e = (*cpg.Expression)(tup)
@@ -977,13 +986,20 @@ func (this *GoLanguageFrontend) handleAssignStmt(fset *token.FileSet, assignStmt
 
 	if assignStmt.Tok == token.DEFINE {
 		// lets create a variable declaration (wrapped with a declaration stmt) with this, because we define the variable here
-		stmt := this.NewDeclarationStatement(fset, assignStmt)
 
 		if len(assignStmt.Lhs) > 1 {
+			stmt := this.NewCompoundStatement(fset, assignStmt)
+			if rhs != nil {
+				stmt.AddStatement((*cpg.Statement)(rhs))
+			}
+
 			for i, ls := range assignStmt.Lhs {
 				name := ls.(*ast.Ident).Name
+
+				decStmt := this.NewDeclarationStatement(fset, assignStmt)
+
 				d := this.NewVariableDeclaration(fset, ls, name)
-				stmt.AddDeclaration((*cpg.Declaration)(d))
+				decStmt.AddDeclaration((*cpg.Declaration)(d))
 
 				tupdest := this.NewDestructureTupleExpression(fset, assignStmt)
 
@@ -995,9 +1011,15 @@ func (this *GoLanguageFrontend) handleAssignStmt(fset *token.FileSet, assignStmt
 				d.SetInitializer((*cpg.Expression)(tupdest))
 
 				this.GetScopeManager().AddDeclaration((*cpg.Declaration)(d))
+				stmt.AddStatement((*cpg.Statement)(decStmt))
 			}
 
+			expr = (*cpg.Statement)(stmt)
+
+			return
 		} else {
+			stmt := this.NewDeclarationStatement(fset, assignStmt)
+
 			var name = assignStmt.Lhs[0].(*ast.Ident).Name
 			d := this.NewVariableDeclaration(fset, assignStmt, name)
 
@@ -1007,12 +1029,18 @@ func (this *GoLanguageFrontend) handleAssignStmt(fset *token.FileSet, assignStmt
 
 			this.GetScopeManager().AddDeclaration((*cpg.Declaration)(d))
 			stmt.SetSingleDeclaration((*cpg.Declaration)(d))
-		}
 
-		expr = (*cpg.Statement)(stmt)
+			expr = (*cpg.Statement)(stmt)
+
+			return
+		}
 	} else {
 		if len(assignStmt.Lhs) > 1 {
 			c := this.NewCompoundStatement(fset, assignStmt)
+
+			if rhs != nil {
+				c.AddStatement((*cpg.Statement)(rhs))
+			}
 
 			for i, ls := range assignStmt.Lhs {
 				lhs := this.handleExpr(fset, ls)
@@ -1166,7 +1194,33 @@ func (this *GoLanguageFrontend) handleCallExpr(fset *token.FileSet, callExpr *as
 	var reference = this.handleExpr(fset, callExpr.Fun)
 
 	if reference == nil {
-		return nil
+		// Check if this is a possible cast
+		callType := this.handleType(callExpr.Fun)
+		if callType == nil {
+			return nil
+		}
+
+		if len(callExpr.Args) != 1 {
+			return nil
+		}
+
+		cast := this.NewCastExpression(fset, callExpr)
+
+		e := this.handleExpr(fset, callExpr.Args[0])
+
+		if e != nil {
+			cast.SetExpression(e)
+		} else {
+			cast.SetExpression(this.NewProblemExpression(
+				fset,
+				callExpr.Args[0],
+				"Could not parse argument.",
+			))
+		}
+
+		cast.SetCastType(callType)
+
+		return (*cpg.Expression)(cast)
 	}
 
 	name := reference.GetName()

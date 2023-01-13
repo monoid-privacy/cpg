@@ -204,7 +204,8 @@ open class CallResolver : SymbolResolverPass() {
         // but it isn't
         val funcPointer =
             walker.getDeclarationForScope(call) { v ->
-                (v.type is FunctionPointerType || v.type is FunctionType) && v.name == call.name
+                (v.type is FunctionPointerType ||
+                    (v.type is FunctionType && v !is FunctionDeclaration)) && v.name == call.name
             }
         if (!funcPointer.isPresent) {
             // function pointers are handled by extra pass
@@ -597,10 +598,24 @@ open class CallResolver : SymbolResolverPass() {
                 resolveConstructorWithImplicitCast(constructExpression, recordDeclaration)
         }
 
-        return constructorCandidate
-            ?: recordDeclaration
+        if (constructorCandidate != null) {
+            return constructorCandidate
+        }
+
+        val inf =
+            recordDeclaration
                 .startInference()
                 .createInferredConstructor(constructExpression.signature)
+
+        if (
+            inf.parameters.size == 1 &&
+                inf.returnTypes.size == 1 &&
+                (inf.parameters[0].type == inf.returnTypes[0])
+        ) {
+            inf.addPrevDFG(inf.parameters[0])
+        }
+
+        return inf
     }
 
     private fun getConstructorDeclarationForExplicitInvocation(

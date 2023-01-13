@@ -121,14 +121,29 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
 
   public void addField(FieldDeclaration fieldDeclaration) {
     addIfNotContains(this.fields, fieldDeclaration);
+    fieldDeclaration.setRecord(this);
   }
 
   public void removeField(FieldDeclaration fieldDeclaration) {
     this.fields.removeIf(propertyEdge -> propertyEdge.getEnd().equals(fieldDeclaration));
+    if (fieldDeclaration.getRecord() == this) {
+      fieldDeclaration.setRecord(this);
+    }
   }
 
   public void setFields(List<FieldDeclaration> fields) {
+    List<FieldDeclaration> oldFields = unwrap(this.fields);
     this.fields = PropertyEdge.transformIntoOutgoingPropertyEdgeList(fields, this);
+
+    for (FieldDeclaration f : oldFields) {
+      if (f.getRecord() == this) {
+        f.setRecord(null);
+      }
+    }
+
+    for (FieldDeclaration f : unwrap(this.fields)) {
+      f.setRecord(this);
+    }
   }
 
   public List<MethodDeclaration> getMethods() {

@@ -180,6 +180,9 @@ open class EvaluationOrderGraphPass : Pass() {
         map[ConditionalExpression::class.java] = CallableInterface {
             handleConditionalExpression(it as ConditionalExpression)
         }
+        map[KeyValueExpression::class.java] = CallableInterface {
+            handleKeyValueExpression(it as KeyValueExpression)
+        }
         map[InitializerListExpression::class.java] = CallableInterface {
             handleInitializerListExpression(it as InitializerListExpression)
         }
@@ -289,6 +292,18 @@ open class EvaluationOrderGraphPass : Pass() {
             createEOG(records)
         }
         scopeManager.leaveScope(node)
+    }
+
+    protected fun handleKeyValueExpression(node: KeyValueExpression) {
+        if (node.key != null) {
+            createEOG(node.key!!)
+        }
+
+        if (node.value != null) {
+            createEOG(node.value!!)
+        }
+
+        pushToEOG(node)
     }
 
     protected fun handleStatementHolder(statementHolder: StatementHolder) {
@@ -415,7 +430,6 @@ open class EvaluationOrderGraphPass : Pass() {
     }
 
     protected fun handleDestructureTupleDeclaration(node: DestructureTupleExpression) {
-        createEOG(node.refersTo)
         pushToEOG(node)
     }
 
