@@ -2,9 +2,9 @@ package main
 
 import "context"
 
-type MyStruct struct{}
+type MyStructU struct{}
 
-func (MyStruct) MyFunc() int {
+func (MyStructU) MyFunc() int {
 	return 1
 }
 

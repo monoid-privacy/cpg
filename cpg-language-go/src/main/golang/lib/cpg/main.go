@@ -93,27 +93,41 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 		log.Fatal(err)
 	}
 
-	var path []byte
-	err = pathObject.CallMethod(env, "getBytes", &path)
+	// Get the path to the file(s) to analyze
+	var pathBytes []byte
+	err = pathObject.CallMethod(env, "getBytes", &pathBytes)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var topLevel []byte
-	err = topLevelObject.CallMethod(env, "getBytes", &topLevel)
+	path, err := filepath.Abs(string(pathBytes))
+	if err != nil {
+		log.Fatalf("Invalid path: %v", err)
+	}
+
+	// Get the path to the project that contains the file (which may contain the go.mod file)
+	var topLevelByte []byte
+	err = topLevelObject.CallMethod(env, "getBytes", &topLevelByte)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if len(topLevel) != 0 {
-		if ok, err := goFrontend.ParseModule(string(topLevel)); !ok || err != nil {
-			log.Fatal("Error occurred while looking for Go modules file: %v", err)
+	topLevel := ""
+
+	if len(topLevelByte) != 0 {
+		topLevel, err = filepath.Abs(string(topLevelByte))
+		if err != nil {
+			log.Fatalf("Invalid path: %v", err)
 		}
 
-		rel, err := filepath.Rel(string(topLevel), string(path))
+		if ok, err := goFrontend.ParseModule(topLevel); !ok || err != nil {
+			goFrontend.LogInfo("Did not find go module file.")
+		}
+
+		rel, err := filepath.Rel(topLevel, path)
 
 		if err != nil {
-			log.Fatal("Could not find path from file to mod path.")
+			log.Fatalf("Could not find path from file to root path. %s %s %v", topLevel, path, err)
 		}
 
 		rel = filepath.Dir(rel)
@@ -126,6 +140,8 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 		}
 	}
 
+	goFrontend.LogInfo("Data: %v", data)
+
 	if data == nil {
 		goFrontend.LogInfo("Initializing")
 		fset := token.NewFileSet()
@@ -133,12 +149,12 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 
 		packageMap := map[string]bool{}
 
-		fileInfo, err := os.Stat(string(topLevel))
+		fileInfo, err := os.Stat(topLevel)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		rootPath := string(topLevel)
+		rootPath := topLevel
 		if !fileInfo.IsDir() {
 			rootPath = filepath.Dir(rootPath)
 		}
@@ -193,7 +209,7 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 			log.Fatal(err)
 		}
 
-		goFrontend.LogInfo("Files: %+v %s", parsedPkgs, string(topLevel))
+		goFrontend.LogInfo("Files: %+v %s", parsedPkgs, topLevel)
 
 		for _, p := range parsedPkgs {
 			goFrontend.LogInfo("Files: %s %s %+v %+v", p.Name, p.PkgPath, p.GoFiles, p.Errors)
@@ -206,7 +222,7 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 				goFrontend.Package = p
 
 				if len(topLevel) != 0 {
-					rel, err := filepath.Rel(string(topLevel), fpath)
+					rel, err := filepath.Rel(topLevel, fpath)
 
 					if err != nil {
 						log.Fatal("Could not find path from file to mod path.")
@@ -256,7 +272,7 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 	goFrontend.RelativeFilePath = ""
 
 	if len(topLevel) != 0 {
-		rel, err := filepath.Rel(string(topLevel), string(path))
+		rel, err := filepath.Rel(topLevel, path)
 
 		if err != nil {
 			log.Fatal("Could not find path from file to mod path.")
@@ -267,16 +283,17 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 		if !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "." {
 			goFrontend.RelativeFilePath = rel
 		} else {
-			goFrontend.LogInfo("Could not find module: %s %s %s", rel, string(topLevel), string(path))
+			goFrontend.LogInfo("Could not find module: %s %s %s", rel, topLevel, path)
 		}
 	}
 
 	var file *ast.File
 	var tu *cpg.TranslationUnitDeclaration
 
-	pkgFile, ok := data.fileMap[string(path)]
+	pkgFile, ok := data.fileMap[path]
 	if !ok {
-		file, err = parser.ParseFile(data.fset, string(path), string(src), parser.ParseComments)
+		goFrontend.LogInfo("Not found file")
+		file, err = parser.ParseFile(data.fset, path, string(src), parser.ParseComments)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -284,21 +301,23 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 		goFrontend.CommentMap = ast.NewCommentMap(data.fset, file, file.Comments)
 		goFrontend.File = file
 
-		tu, err = goFrontend.HandleFileRecordDeclarations(data.fset, file, string(path))
+		tu, err = goFrontend.HandleFileRecordDeclarations(data.fset, file, path)
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
 		file = pkgFile.file
+		goFrontend.LogInfo("Found file: %s", file.Name.Name)
+
 		var i = jnigi.NewObjectRef(cpg.TranslationUnitDeclarationClass)
 		if err := goFrontend.ObjectRef.CallMethod(
 			env,
 			"getActiveTranslationUnit",
 			i,
-			pathObject,
+			cpg.NewString(path),
 		); err != nil {
 			goFrontend.LogError("%v", err)
-			tu = goFrontend.NewTranslationUnitDeclaration(data.fset, file, string(path))
+			tu = goFrontend.NewTranslationUnitDeclaration(data.fset, file, path)
 		} else {
 			tu = (*cpg.TranslationUnitDeclaration)(i)
 		}
@@ -308,7 +327,7 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 		goFrontend.File = file
 	}
 
-	goFrontend.LogInfo("Path: %s, top: %s", path, topLevel)
+	goFrontend.LogInfo("Path: %s, top: %s, tu: %v", path, topLevel, tu)
 
 	err = goFrontend.HandleFileContent(data.fset, file, tu)
 	if err != nil {
@@ -316,4 +335,9 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 	}
 
 	return C.jobject((*jnigi.ObjectRef)(tu).JObject())
+}
+
+//export Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_resetState
+func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_resetState(envPointer *C.JNIEnv, thisPtr C.jobject) {
+	data = nil
 }

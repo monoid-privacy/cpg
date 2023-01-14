@@ -54,7 +54,10 @@ func (frontend *GoLanguageFrontend) getImportName(spec *ast.ImportSpec) string {
 
 	if frontend.Package != nil {
 		im := frontend.Package.Imports[path]
-		return im.Name
+
+		if im.Name != "" {
+			return im.Name
+		}
 	}
 
 	return paths[len(paths)-1]
@@ -378,7 +381,6 @@ func (this *GoLanguageFrontend) handleFuncDecl(fset *token.FileSet, funcDecl *as
 				// marked as AST and in Go a method is not part of the struct's AST but is declared
 				// outside. In the future, we need to differentiate between just the associated members
 				// of the class and the pure AST nodes declared in the struct itself
-				this.LogDebug("Record: %+v", record)
 
 				err = record.AddMethod(m)
 				if err != nil {
@@ -386,7 +388,7 @@ func (this *GoLanguageFrontend) handleFuncDecl(fset *token.FileSet, funcDecl *as
 
 				}
 			} else {
-				this.LogInfo("Record is nil: %s", recordName)
+				this.LogDebug("Record is nil: %s", recordName)
 			}
 		}
 
@@ -529,6 +531,10 @@ func (this *GoLanguageFrontend) modulePath() string {
 	packPath := this.Module.Module.Mod.Path
 	if this.RelativeFilePath != "" {
 		packPath += "/" + this.RelativeFilePath
+	}
+
+	if this.File.Name.Name == "main" {
+		packPath += "/main"
 	}
 
 	return packPath
@@ -1407,7 +1413,8 @@ func (this *GoLanguageFrontend) handleSelectorExpr(fset *token.FileSet, selector
 	importPath := ""
 
 	for _, imp := range this.File.Imports {
-		if base.GetName() == this.getImportName(imp) && xident {
+		n := this.getImportName(imp)
+		if base.GetName() == n && xident {
 			// found a package name, so this is NOT a member expression
 			isMemberExpression = false
 			var err error

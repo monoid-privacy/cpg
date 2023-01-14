@@ -67,7 +67,7 @@ internal class TypedefTest : BaseTest() {
         val fpType = uintfp1.type as? FunctionPointerType
         assertNotNull(fpType)
 
-        val returnType = fpType.returnType as? ObjectType
+        val returnType = fpType.returnTypes.first() as? ObjectType
         assertNotNull(returnType)
         assertEquals(ObjectType.Modifier.UNSIGNED, returnType.modifier)
         assertEquals(uintfp1.type, uintfp2.type)

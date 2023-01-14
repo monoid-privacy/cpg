@@ -49,10 +49,10 @@ class GoLanguageFrontend(
     config: TranslationConfiguration,
     scopeManager: ScopeManager
 ) : LanguageFrontend(language, config, scopeManager) {
-
     companion object {
         @JvmField var GOLANG_EXTENSIONS: List<String> = listOf(".go")
         var activeTranslationUnits = mutableMapOf<String, TranslationUnitDeclaration>()
+        var currentScopeManager: ScopeManager? = null
 
         init {
             try {
@@ -87,6 +87,14 @@ class GoLanguageFrontend(
                     ex
                 )
             }
+        }
+    }
+
+    init {
+        if (scopeManager != currentScopeManager) {
+            activeTranslationUnits = mutableMapOf<String, TranslationUnitDeclaration>()
+            resetState()
+            currentScopeManager = scopeManager
         }
     }
 
@@ -125,4 +133,6 @@ class GoLanguageFrontend(
         path: String,
         topLevel: String
     ): TranslationUnitDeclaration
+
+    private external fun resetState()
 }

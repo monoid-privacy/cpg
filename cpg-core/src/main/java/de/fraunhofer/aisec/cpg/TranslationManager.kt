@@ -230,9 +230,11 @@ private constructor(
 
             if (!config.typeSystemActiveInFrontend) {
                 TypeManager.setTypeSystemActive(true)
+                log.warn("ITft")
 
                 result.components.forEach { s ->
                     s.translationUnits.forEach {
+                        log.warn("IT: " + it)
                         val bench =
                             Benchmark(this.javaClass, "Activating types for ${it.name}", true)
                         result.scopeManager.activateTypes(it)

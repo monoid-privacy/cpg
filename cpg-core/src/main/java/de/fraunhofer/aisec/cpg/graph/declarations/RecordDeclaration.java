@@ -43,9 +43,12 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.neo4j.ogm.annotation.Relationship;
 import org.neo4j.ogm.annotation.Transient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Represents a C++ union/struct/class or Java class */
 public class RecordDeclaration extends Declaration implements DeclarationHolder, StatementHolder {
+  private static final Logger log = LoggerFactory.getLogger(RecordDeclaration.class);
 
   /** The kind, i.e. struct, class, union or enum. */
   private String kind;
@@ -155,6 +158,7 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   }
 
   public void addMethod(MethodDeclaration methodDeclaration) {
+    log.info("Add method: " + methodDeclaration);
     addIfNotContains(this.methods, methodDeclaration);
   }
 

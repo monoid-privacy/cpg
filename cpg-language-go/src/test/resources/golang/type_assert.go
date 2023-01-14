@@ -2,15 +2,16 @@ package main
 
 import "fmt"
 
-type MyStruct struct {}
+type MyStructTA struct{}
 type MyInterface interface {
-    MyFunc()
+	MyFunc()
 }
-func (MyStruct) MyFunc() {}
 
-func main () {
-    var f MyInterface = MyStruct{}
-    var s = f.(MyStruct)
+func (MyStructTA) MyFunc() {}
 
-    fmt.Printf("%+v", s)
+func main() {
+	var f MyInterface = MyStructTA{}
+	var s = f.(MyStructTA)
+
+	fmt.Printf("%+v", s)
 }

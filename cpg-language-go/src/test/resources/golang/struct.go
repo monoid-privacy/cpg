@@ -1,9 +1,11 @@
 package p
 
-import ("fmt")
+import (
+	"fmt"
+)
 
 type MyStruct struct {
-    MyField int
+	MyField int
 }
 
 type MyInterface interface {
@@ -11,7 +13,7 @@ type MyInterface interface {
 }
 
 func (s MyStruct) MyFunc() string {
-    fmt.Printf(s.myOtherFunc(), s.MyField)
+	fmt.Printf(s.myOtherFunc(), s.MyField)
 
 	return "s"
 }
@@ -21,5 +23,5 @@ func (s MyStruct) myOtherFunc() string {
 }
 
 func NewMyStruct() *MyStruct {
-    return &MyStruct{}
+	return &MyStruct{}
 }

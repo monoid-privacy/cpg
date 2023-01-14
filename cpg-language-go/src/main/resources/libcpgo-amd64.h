@@ -5,7 +5,7 @@
 
 #line 1 "cgo-builtin-export-prolog"
 
-#include <stddef.h> /* for ptrdiff_t below */
+#include <stddef.h>
 
 #ifndef GO_CGO_EXPORT_PROLOGUE_H
 #define GO_CGO_EXPORT_PROLOGUE_H
@@ -44,11 +44,17 @@ typedef long long GoInt64;
 typedef unsigned long long GoUint64;
 typedef GoInt64 GoInt;
 typedef GoUint64 GoUint;
-typedef __SIZE_TYPE__ GoUintptr;
+typedef size_t GoUintptr;
 typedef float GoFloat32;
 typedef double GoFloat64;
+#ifdef _MSC_VER
+#include <complex.h>
+typedef _Fcomplex GoComplex64;
+typedef _Dcomplex GoComplex128;
+#else
 typedef float _Complex GoComplex64;
 typedef double _Complex GoComplex128;
+#endif
 
 /*
   static assertion to make sure the file is being used on architecture
@@ -73,6 +79,7 @@ extern "C" {
 #endif
 
 extern jobject Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInternal(JNIEnv* envPointer, jobject thisPtr, jobject arg1, jobject arg2, jobject arg3);
+extern void Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_resetState(JNIEnv* envPointer, jobject thisPtr);
 
 #ifdef __cplusplus
 }

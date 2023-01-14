@@ -1,13 +1,13 @@
 package p
 
-type MyStruct struct {}
+type MyStructC struct{}
 
 func main() {
-  o := new(MyStruct)
+	o := new(MyStructC)
 
-  a := make([]int, 5)
+	a := make([]int, 5)
 
-  m := make(map[string]string, 10)
+	m := make(map[string]string, 10)
 
-  ch := make(chan int)
+	ch := make(chan int)
 }
