@@ -116,16 +116,18 @@ class PassWithDepsContainer {
      * dependencies to the workingList.
      */
     fun addMissingDependencies() {
-        val it = workingList.listIterator()
-        while (it.hasNext()) {
-            val current = it.next()
+        val wl = ArrayList(workingList)
+        while (!wl.isEmpty()) {
+            val current = wl.removeLast()
             for (dependency in current.pass.hardDependencies) {
                 if (!dependencyPresent(dependency)) {
                     log.info(
                         "Registering a required hard dependency which was not registered explicitly: {}",
                         dependency
                     )
-                    it.add(createNewPassWithDependency(dependency))
+                    val pass = createNewPassWithDependency(dependency)
+                    wl.add(pass)
+                    workingList.add(pass)
                 }
             }
         }

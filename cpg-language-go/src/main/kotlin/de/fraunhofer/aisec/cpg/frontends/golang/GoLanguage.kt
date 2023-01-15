@@ -27,6 +27,7 @@ package de.fraunhofer.aisec.cpg.frontends.golang
 
 import de.fraunhofer.aisec.cpg.TranslationConfiguration
 import de.fraunhofer.aisec.cpg.frontends.*
+import de.fraunhofer.aisec.cpg.frontends.HasFunctionPointers
 import de.fraunhofer.aisec.cpg.frontends.HasImplicitInterfaces
 import de.fraunhofer.aisec.cpg.frontends.HasNoClassScope
 import de.fraunhofer.aisec.cpg.frontends.HasShortCircuitOperators
@@ -49,7 +50,8 @@ open class GoLanguage :
     HasShortCircuitOperators,
     HasComplexCallResolution,
     HasImplicitInterfaces,
-    HasNoClassScope {
+    HasNoClassScope,
+    HasFunctionPointers {
     override val fileExtensions = listOf("go")
     override val namespaceDelimiter = "."
     override val frontend: KClass<out GoLanguageFrontend> = GoLanguageFrontend::class

@@ -336,7 +336,6 @@ fun RecordDeclaration.inferMethod(
     isStatic: Boolean = false
 ): MethodDeclaration {
     val log: Logger = LoggerFactory.getLogger(RecordDeclaration::class.java)
-    log.info("Inferring method")
 
     return Inference(this)
         .createInferredFunctionDeclaration(

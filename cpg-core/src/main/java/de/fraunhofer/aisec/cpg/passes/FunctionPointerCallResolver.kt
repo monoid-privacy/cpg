@@ -26,6 +26,7 @@
 package de.fraunhofer.aisec.cpg.passes
 
 import de.fraunhofer.aisec.cpg.TranslationResult
+import de.fraunhofer.aisec.cpg.frontends.HasFunctionPointers
 import de.fraunhofer.aisec.cpg.frontends.cpp.CXXLanguageFrontend
 import de.fraunhofer.aisec.cpg.graph.HasType
 import de.fraunhofer.aisec.cpg.graph.Node
@@ -40,6 +41,8 @@ import de.fraunhofer.aisec.cpg.graph.types.FunctionType
 import de.fraunhofer.aisec.cpg.helpers.IdentitySet
 import de.fraunhofer.aisec.cpg.helpers.SubgraphWalker.ScopedWalker
 import de.fraunhofer.aisec.cpg.passes.order.DependsOn
+import de.fraunhofer.aisec.cpg.passes.order.ExecuteBefore
+import de.fraunhofer.aisec.cpg.passes.order.RequiredLanguageTrait
 import java.util.*
 import java.util.function.Consumer
 
@@ -56,6 +59,8 @@ import java.util.function.Consumer
  */
 @DependsOn(CallResolver::class)
 @DependsOn(DFGPass::class)
+@ExecuteBefore(ControlFlowSensitiveDFGPass::class)
+@RequiredLanguageTrait(HasFunctionPointers::class)
 class FunctionPointerCallResolver : Pass() {
     private lateinit var walker: ScopedWalker
     private var inferDfgForUnresolvedCalls = false
@@ -126,8 +131,6 @@ class FunctionPointerCallResolver : Pass() {
             }
 
         if (pointerType == null) return
-
-        log.info("Handling function pointer call: " + call.code)
 
         val invocationCandidates: MutableList<FunctionDeclaration> = ArrayList()
         val work: Deque<Node> = ArrayDeque()

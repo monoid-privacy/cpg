@@ -119,6 +119,24 @@ abstract class Pass protected constructor() : Consumer<TranslationResult> {
                 false
             }
 
+    fun checkFrontend(usedFrontends: Collection<LanguageFrontend>): Boolean {
+        if (!this.javaClass.isAnnotationPresent(RequiredFrontend::class.java)) return true
+        val requiredFrontend = this.javaClass.getAnnotation(RequiredFrontend::class.java).value
+        for (used in usedFrontends) {
+            if (used.javaClass == requiredFrontend.java) return true
+        }
+        return false
+    }
+
+    fun checkLanguageTraits(usedFrontends: Collection<LanguageFrontend>): Boolean {
+        if (!this.javaClass.isAnnotationPresent(RequiredLanguageTrait::class.java)) return true
+        val requiredFrontend = this.javaClass.getAnnotation(RequiredLanguageTrait::class.java).value
+        for (used in usedFrontends) {
+            if (requiredFrontend.java.isAssignableFrom(used.language.javaClass)) return true
+        }
+        return false
+    }
+
     /**
      * Check if the pass requires a specific language frontend and if that frontend has been
      * executed.
@@ -127,12 +145,7 @@ abstract class Pass protected constructor() : Consumer<TranslationResult> {
      * [RequiredFrontend]
      */
     fun runsWithCurrentFrontend(usedFrontends: Collection<LanguageFrontend>): Boolean {
-        if (!this.javaClass.isAnnotationPresent(RequiredFrontend::class.java)) return true
-        val requiredFrontend = this.javaClass.getAnnotation(RequiredFrontend::class.java).value
-        for (used in usedFrontends) {
-            if (used.javaClass == requiredFrontend.java) return true
-        }
-        return false
+        return checkFrontend(usedFrontends) && checkLanguageTraits(usedFrontends)
     }
 
     companion object {

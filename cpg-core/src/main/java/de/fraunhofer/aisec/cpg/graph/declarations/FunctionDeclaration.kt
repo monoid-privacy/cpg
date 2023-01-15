@@ -35,6 +35,7 @@ import de.fraunhofer.aisec.cpg.graph.edge.PropertyEdgeDelegate
 import de.fraunhofer.aisec.cpg.graph.statements.CompoundStatement
 import de.fraunhofer.aisec.cpg.graph.statements.Statement
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.Expression
+import de.fraunhofer.aisec.cpg.graph.types.MissingType
 import de.fraunhofer.aisec.cpg.graph.types.Type
 import de.fraunhofer.aisec.cpg.graph.types.UnknownType
 import java.util.*
@@ -233,7 +234,7 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
                 if (paramVariableDeclaration.default != null) {
                     signature.add(paramVariableDeclaration.getType())
                 } else {
-                    signature.add(UnknownType.getUnknownType(language))
+                    signature.add(MissingType.getMissingType(language))
                 }
             }
             return signature

@@ -78,14 +78,17 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   @NotNull
   private @SubGraph("AST") List<PropertyEdge<Statement>> statements = new ArrayList<>();
 
-  @Transient private List<Type> superClasses = new ArrayList<>();
-  @Transient private List<Type> implementedInterfaces = new ArrayList<>();
+  @Transient
+  private List<Type> superClasses = new ArrayList<>();
+  @Transient
+  private List<Type> implementedInterfaces = new ArrayList<>();
 
   @org.neo4j.ogm.annotation.Relationship
   private Set<RecordDeclaration> superTypeDeclarations = new HashSet<>();
 
   private List<String> importStatements = new ArrayList<>();
-  @org.neo4j.ogm.annotation.Relationship private Set<Declaration> imports = new HashSet<>();
+  @org.neo4j.ogm.annotation.Relationship
+  private Set<Declaration> imports = new HashSet<>();
   // Methods and fields can be imported statically
   private List<String> staticImportStatements = new ArrayList<>();
 
@@ -158,7 +161,6 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   }
 
   public void addMethod(MethodDeclaration methodDeclaration) {
-    log.info("Add method: " + methodDeclaration);
     addIfNotContains(this.methods, methodDeclaration);
   }
 
@@ -236,10 +238,12 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   }
 
   /**
-   * Combines both implemented interfaces and extended classes. This is most commonly what you are
+   * Combines both implemented interfaces and extended classes. This is most
+   * commonly what you are
    * looking for when looking for method call targets etc.
    *
-   * @return concatenation of {@link #getSuperClasses()} and {@link #getImplementedInterfaces()}
+   * @return concatenation of {@link #getSuperClasses()} and
+   *         {@link #getImplementedInterfaces()}
    */
   public List<Type> getSuperTypes() {
     return Stream.of(superClasses, implementedInterfaces)
@@ -248,7 +252,8 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   }
 
   /**
-   * The classes that are extended by this one. Usually zero or one, but in C++ this can contain
+   * The classes that are extended by this one. Usually zero or one, but in C++
+   * this can contain
    * multiple classes
    *
    * @return extended classes

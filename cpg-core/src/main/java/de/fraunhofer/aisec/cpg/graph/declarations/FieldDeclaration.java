@@ -65,7 +65,6 @@ public class FieldDeclaration extends ValueDeclaration implements TypeListener, 
   @Nullable private RecordDeclaration record;
 
   public void setRecord(RecordDeclaration r) {
-    LOGGER.info("Setting record: " + r);
     this.record = r;
   }
 

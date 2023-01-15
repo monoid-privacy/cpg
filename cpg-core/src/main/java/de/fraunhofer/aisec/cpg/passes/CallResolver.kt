@@ -251,8 +251,6 @@ open class CallResolver : SymbolResolverPass() {
                 val invocationCandidates = scopeManager.resolveFunction(call).toMutableList()
 
                 if (invocationCandidates.isEmpty()) {
-                    log.info("Registering dummies2 for: " + call.code + " " + call.name)
-
                     // If we have no candidates, we create an inferred FunctionDeclaration
                     invocationCandidates.add(currentTU.inferFunction(call))
                 }

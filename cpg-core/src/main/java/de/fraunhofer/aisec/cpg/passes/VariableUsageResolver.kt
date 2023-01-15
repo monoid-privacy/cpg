@@ -99,7 +99,6 @@ open class VariableUsageResolver : SymbolResolverPass() {
             walker.iterate(tu)
         }
 
-        log.info("Resolving unknowns")
         for (tu in result.translationUnits) {
             walker.clearCallbacks()
             walker.registerHandler { curClass, _, node -> resolveUnknowns(curClass, node) }
@@ -481,8 +480,6 @@ open class VariableUsageResolver : SymbolResolverPass() {
         if (base.typeName !in recordMap) {
             // No matching record in the map? If we should infer it, we do so, otherwise we stop.
             if (config?.inferenceConfiguration?.inferRecords != true) return null
-
-            log.info("Not in record map again: " + base.typeName)
 
             // We access an unknown field of an unknown record. so we need to handle that
             val kind =

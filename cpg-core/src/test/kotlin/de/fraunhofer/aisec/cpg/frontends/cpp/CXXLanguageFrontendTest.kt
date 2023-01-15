@@ -310,7 +310,7 @@ internal class CXXLanguageFrontendTest : BaseTest() {
         val fpType = param.type as? FunctionPointerType
         assertNotNull(fpType)
         assertEquals(1, fpType.parameters.size)
-        assertEquals("void", fpType.returnType.name)
+        assertEquals("void", fpType.returnTypes.first().name)
     }
 
     @Test
