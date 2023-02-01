@@ -46,7 +46,7 @@ public class ParamVariableDeclaration extends ValueDeclaration implements HasDef
     return variadic;
   }
 
-  public void setVariadic(boolean variadic) {
+  public void setVariadic(Boolean variadic) {
     this.variadic = variadic;
   }
 

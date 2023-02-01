@@ -49,7 +49,7 @@ class ExpressionTest {
             ) { it.registerLanguage<GoLanguage>() }
         assertNotNull(tu)
 
-        val main = tu.namespaces.filter { it.name == "p/main" }
+        val main = tu.namespaces.filter { it.name == "p" }
         assertTrue(main.size > 0)
 
         val mainFunc = (main.flatMap { it.functions })["main"]
@@ -67,7 +67,7 @@ class ExpressionTest {
 
         val cast = s.initializer as? CastExpression
         assertNotNull(cast)
-        assertEquals("p/main.MyStructTA", cast.castType.name)
+        assertEquals("p.MyStructTA", cast.castType.name)
         assertSame(f, (cast.expression as? DeclaredReferenceExpression)?.refersTo)
     }
 }

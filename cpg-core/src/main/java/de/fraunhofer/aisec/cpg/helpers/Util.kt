@@ -27,6 +27,8 @@ package de.fraunhofer.aisec.cpg.helpers
 
 import de.fraunhofer.aisec.cpg.frontends.Language
 import de.fraunhofer.aisec.cpg.frontends.LanguageFrontend
+import de.fraunhofer.aisec.cpg.graph.DFGTag
+import de.fraunhofer.aisec.cpg.graph.DFGTagDirection
 import de.fraunhofer.aisec.cpg.graph.Node
 import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.ParamVariableDeclaration
@@ -328,7 +330,11 @@ object Util {
      * @param target The call's target [FunctionDeclaration]
      * @param arguments The call's arguments to be connected to the target's parameters
      */
-    fun attachCallParameters(target: FunctionDeclaration, arguments: List<Expression?>) {
+    fun attachCallParameters(
+        target: FunctionDeclaration,
+        arguments: List<Expression?>,
+        callID: String
+    ) {
         target.parameterEdges.sortWith(
             Comparator.comparing { pe: PropertyEdge<ParamVariableDeclaration> ->
                 pe.end.argumentIndex
@@ -343,12 +349,12 @@ object Util {
                     while (j < arguments.size) {
 
                         // map all the following arguments to this variadic param
-                        param.addPrevDFG(arguments[j]!!)
+                        param.addPrevDFG(arguments[j]!!, DFGTag(callID, DFGTagDirection.ENTER))
                         j++
                     }
                     break
                 } else {
-                    param.addPrevDFG(arguments[j]!!)
+                    param.addPrevDFG(arguments[j]!!, DFGTag(callID, DFGTagDirection.ENTER))
                 }
             }
             j++

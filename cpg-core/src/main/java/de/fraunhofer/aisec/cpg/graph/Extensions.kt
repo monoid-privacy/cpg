@@ -36,6 +36,10 @@ import de.fraunhofer.aisec.cpg.graph.statements.expressions.*
 import de.fraunhofer.aisec.cpg.helpers.SubgraphWalker
 import de.fraunhofer.aisec.cpg.passes.astParent
 
+fun Node?.filterChildren(predicate: ((Node) -> Boolean)?): List<Node> {
+    return this.allChildren(predicate)
+}
+
 /**
  * Flattens the AST beginning with this node and returns all nodes of type [T]. For convenience, an
  * optional predicate function [predicate] can be supplied, which will be applied via
@@ -258,11 +262,11 @@ fun Node.followNextDFGEdgesUntilHit(predicate: (Node) -> Boolean): FulfilledAndF
     // failedPaths: All the paths which do not satisfy "predicate"
     val failedPaths = mutableListOf<List<Node>>()
     // The list of paths where we're not done yet.
-    val worklist = mutableListOf<List<Node>>()
-    worklist.add(listOf(this)) // We start only with the "from" node (=this)
+    val worklist = mutableListOf<Pair<List<Node>, Set<String>>>()
+    worklist.add(Pair(listOf(this), emptySet())) // We start only with the "from" node (=this)
 
     while (worklist.isNotEmpty()) {
-        val currentPath = worklist.removeFirst()
+        val (currentPath, currentTags) = worklist.removeFirst()
         // The last node of the path is where we continue. We get all of its outgoing DFG edges and
         // follow them
         if (currentPath.last().nextDFG.isEmpty()) {
@@ -271,7 +275,22 @@ fun Node.followNextDFGEdgesUntilHit(predicate: (Node) -> Boolean): FulfilledAndF
             continue
         }
 
-        for (next in currentPath.last().nextDFG) {
+        for ((next, dfgTag) in currentPath.last().nextDFGMap) {
+            val nextTags = mutableSetOf<String>()
+            nextTags.addAll(currentTags)
+
+            if (dfgTag != null) {
+                if (dfgTag.direction == DFGTagDirection.ENTER) {
+                    nextTags.add(dfgTag.tag)
+                } else if (dfgTag.direction == DFGTagDirection.EXIT) {
+                    if (dfgTag.tag !in currentTags) {
+                        continue
+                    }
+
+                    nextTags.remove(dfgTag.tag)
+                }
+            }
+
             // Copy the path for each outgoing DFG edge and add the next node
             val nextPath = mutableListOf<Node>()
             nextPath.addAll(currentPath)
@@ -285,7 +304,7 @@ fun Node.followNextDFGEdgesUntilHit(predicate: (Node) -> Boolean): FulfilledAndF
             // The next node is new in the current path (i.e., there's no loop), so we add the path
             // with the next step to the worklist.
             if (!currentPath.contains(next)) {
-                worklist.add(nextPath)
+                worklist.add(Pair(nextPath, nextTags))
             }
         }
     }

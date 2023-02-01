@@ -34,6 +34,7 @@ import de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
+import de.fraunhofer.aisec.cpg.passes.*
 import de.fraunhofer.aisec.cpg.query.QueryTree
 import de.fraunhofer.aisec.cpg.query.dataFlow
 import java.io.File
@@ -66,6 +67,20 @@ private const val DEFAULT_PORT = 7687
 private const val DEFAULT_USER_NAME = "neo4j"
 private const val DEFAULT_PASSWORD = "password"
 private const val DEFAULT_SAVE_DEPTH = -1
+
+fun TranslationConfiguration.Builder.n4jpasses(): TranslationConfiguration.Builder {
+    registerPass(TypeHierarchyResolver())
+    registerPass(JavaExternalTypeHierarchyResolver())
+    registerPass(ImportResolver())
+    registerPass(VariableUsageResolver())
+    registerPass(CallResolver()) // creates CG
+    registerPass(DFGPass())
+    registerPass(FunctionPointerCallResolver())
+    registerPass(EvaluationOrderGraphPass()) // creates EOG
+    registerPass(TypeResolver())
+    registerPass(FilenameMapper())
+    return this
+}
 
 /**
  * An application to export the <a href="https://github.com/Fraunhofer-AISEC/cpg">cpg</a> to a <a
@@ -422,7 +437,7 @@ class Application : Callable<Int> {
         }
 
         if (!noDefaultPasses) {
-            translationConfiguration.defaultPasses()
+            translationConfiguration.n4jpasses()
         }
 
         if (mutuallyExclusiveParameters.jsonCompilationDatabase != null) {

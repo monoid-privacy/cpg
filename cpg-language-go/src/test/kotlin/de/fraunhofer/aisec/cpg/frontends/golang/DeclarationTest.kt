@@ -46,10 +46,10 @@ class DeclarationTest {
             ) { it.registerLanguage<GoLanguage>() }
         assertNotNull(tu)
 
-        val main = tu.namespaces.filter { it.name == "p/main" }
+        val main = tu.namespaces.filter { it.name == "p" }
         assertTrue(main.size > 0)
 
-        val myStruct = (main.flatMap { it.records })["p/main.MyStructU"]
+        val myStruct = (main.flatMap { it.records })["p.MyStructU"]
         assertNotNull(myStruct)
 
         // Receiver should be null since its unnamed
@@ -69,7 +69,7 @@ class DeclarationTest {
             ) { it.registerLanguage<GoLanguage>() }
         assertNotNull(tu)
 
-        val main = tu.namespaces.filter { it.name == "p/main" }
+        val main = tu.namespaces.filter { it.name == "p" }
         assertTrue(main.size > 0)
 
         // Parameter should be there but not have a name
@@ -92,13 +92,13 @@ class DeclarationTest {
             ) { it.registerLanguage<GoLanguage>() }
         assertNotNull(tu)
 
-        val main = tu.namespaces.filter { it.name == "p/main" }
+        val main = tu.namespaces.filter { it.name == "p" }
         assertTrue(main.size > 0)
 
-        val myInterface = (main.flatMap { it.records })["p/main.MyInterface"]
+        val myInterface = (main.flatMap { it.records })["p.MyInterface"]
         assertNotNull(myInterface)
 
-        val myOtherInterface = (main.flatMap { it.records })["p/main.MyOtherInterface"]
+        val myOtherInterface = (main.flatMap { it.records })["p.MyOtherInterface"]
         assertNotNull(myOtherInterface)
 
         // MyOtherInterface should be in the superClasses and superTypeDeclarations of MyInterface,

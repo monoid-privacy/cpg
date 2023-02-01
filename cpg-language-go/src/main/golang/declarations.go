@@ -128,6 +128,10 @@ func (p *ParamVariableDeclaration) SetName(s string) error {
 	return (*Node)(p).SetName(s)
 }
 
+func (p *ParamVariableDeclaration) SetVariadic(b bool) {
+	(*jnigi.ObjectRef)(p).CallMethod(env, "setVariadic", nil, NewBoolean(b))
+}
+
 func (f *FieldDeclaration) SetName(s string) error {
 	return (*Node)(f).SetName(s)
 }
@@ -191,6 +195,10 @@ func (r *RecordDeclaration) AddSuperClass(t *Type) (err error) {
 	(*jnigi.ObjectRef)(r).CallMethod(env, "addSuperClass", nil, t)
 
 	return
+}
+
+func (r *RecordDeclaration) AddExternalSubType(t *Type) (err error) {
+	return (*jnigi.ObjectRef)(r).CallMethod(env, "addExternalSubType", nil, t)
 }
 
 func (r *RecordDeclaration) AddField(f *FieldDeclaration) {

@@ -25,6 +25,7 @@
  */
 package de.fraunhofer.aisec.cpg.graph.declarations
 
+import de.fraunhofer.aisec.cpg.frontends.HasNoMultipleFunctionNames
 import de.fraunhofer.aisec.cpg.graph.DeclarationHolder
 import de.fraunhofer.aisec.cpg.graph.SubGraph
 import de.fraunhofer.aisec.cpg.graph.TypeManager
@@ -124,23 +125,7 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
                 .sorted(Comparator.comparingInt(ParamVariableDeclaration::argumentIndex))
                 .collect(Collectors.toList())
 
-        if (this.name.contains("copyFile")) {
-            LOGGER.info(
-                "signature: " +
-                    targetSignature.size +
-                    " " +
-                    signature.size +
-                    " " +
-                    signature +
-                    " " +
-                    targetSignature
-            )
-        }
-
         return if (targetSignature.size < signature.size) {
-            if (this.name.contains("copyFile")) {
-                LOGGER.info("returning early false")
-            }
             false
         } else {
             // signature is a collection of positional arguments, so the order must be preserved
@@ -154,27 +139,20 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
                     // with
                     // different vararg types, in C++ we can't, as vararg types are not defined here
                     // anyways)
-                    if (this.name.contains("copyFile")) {
-                        LOGGER.info("returning true")
-                    }
                     return true
                 }
                 val provided = targetSignature[i]
                 if (
-                    !TypeManager.getInstance().isSupertypeOf(declared.getType(), provided, this) &&
+                    language !is HasNoMultipleFunctionNames &&
+                        !TypeManager.getInstance()
+                            .isSupertypeOf(declared.getType(), provided, this) &&
                         declared.getType() !is UnknownType &&
                         provided !is UnknownType
                 ) {
-                    if (this.name.contains("copyFile")) {
-                        LOGGER.info("returning false: " + provided + " " + declared.getType())
-                    }
                     return false
                 }
             }
 
-            if (this.name.contains("copyFile")) {
-                LOGGER.info("returning: " + (targetSignature.size == signature.size))
-            }
             // Longer target signatures are only allowed with varargs. If we reach this point, no
             // vararg has been encountered
             targetSignature.size == signature.size

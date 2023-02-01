@@ -28,6 +28,8 @@ package de.fraunhofer.aisec.cpg.passes
 import de.fraunhofer.aisec.cpg.TranslationResult
 import de.fraunhofer.aisec.cpg.graph.AccessValues
 import de.fraunhofer.aisec.cpg.graph.Assignment
+import de.fraunhofer.aisec.cpg.graph.DFGTag
+import de.fraunhofer.aisec.cpg.graph.DFGTagDirection
 import de.fraunhofer.aisec.cpg.graph.Node
 import de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
@@ -41,6 +43,7 @@ import de.fraunhofer.aisec.cpg.graph.statements.expressions.*
 import de.fraunhofer.aisec.cpg.helpers.SubgraphWalker.IterativeGraphWalker
 import de.fraunhofer.aisec.cpg.helpers.Util
 import de.fraunhofer.aisec.cpg.passes.order.DependsOn
+import java.util.UUID
 
 /** Adds the DFG edges for various types of nodes. */
 @DependsOn(VariableUsageResolver::class)
@@ -420,16 +423,17 @@ class DFGPass : Pass() {
     fun handleCallExpression(call: CallExpression, inferDfgForUnresolvedSymbols: Boolean) {
         // Remove existing DFG edges since they are no longer valid (e.g. after updating the
         // CallExpression with the invokes edges to the called functions)
-        call.prevDFG.forEach { it.nextDFG.remove(call) }
-        call.prevDFG.clear()
+        call.clearPrevDFG()
 
         if (call.invokes.isEmpty() && inferDfgForUnresolvedSymbols) {
             // Unresolved call expression
             handleUnresolvedCalls(call)
         } else if (call.invokes.isNotEmpty()) {
             call.invokes.forEach {
-                Util.attachCallParameters(it, call.arguments)
-                call.addPrevDFG(it)
+                val callID = UUID.randomUUID().toString()
+
+                Util.attachCallParameters(it, call.arguments, callID)
+                call.addPrevDFG(it, DFGTag(callID, DFGTagDirection.EXIT))
             }
         }
     }

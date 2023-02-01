@@ -61,6 +61,8 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   @SubGraph("AST")
   private List<PropertyEdge<MethodDeclaration>> methods = new ArrayList<>();
 
+  private Map<String, List<Integer>> methodMap = new HashMap<>();
+
   @Relationship(value = "CONSTRUCTORS", direction = "OUTGOING")
   @SubGraph("AST")
   private List<PropertyEdge<ConstructorDeclaration>> constructors = new ArrayList<>();
@@ -78,17 +80,16 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   @NotNull
   private @SubGraph("AST") List<PropertyEdge<Statement>> statements = new ArrayList<>();
 
-  @Transient
-  private List<Type> superClasses = new ArrayList<>();
-  @Transient
-  private List<Type> implementedInterfaces = new ArrayList<>();
+  @Transient private List<Type> superClasses = new ArrayList<>();
+  @Transient private List<Type> implementedInterfaces = new ArrayList<>();
+
+  @org.neo4j.ogm.annotation.Relationship private Set<Type> externalSubTypes = new HashSet<>();
 
   @org.neo4j.ogm.annotation.Relationship
   private Set<RecordDeclaration> superTypeDeclarations = new HashSet<>();
 
   private List<String> importStatements = new ArrayList<>();
-  @org.neo4j.ogm.annotation.Relationship
-  private Set<Declaration> imports = new HashSet<>();
+  @org.neo4j.ogm.annotation.Relationship private Set<Declaration> imports = new HashSet<>();
   // Methods and fields can be imported statically
   private List<String> staticImportStatements = new ArrayList<>();
 
@@ -156,20 +157,71 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
     return unwrap(this.methods);
   }
 
+  public List<MethodDeclaration> methodsWithName(String name) {
+    List<MethodDeclaration> res = new ArrayList<>();
+    List<Integer> inxs = this.methodMap.get(name);
+
+    if (inxs == null) {
+      return res;
+    }
+
+    for (Integer ix : inxs) {
+      res.add(getAndUnwrap(this.methods, ix, true));
+    }
+
+    return res;
+  }
+
   public List<PropertyEdge<MethodDeclaration>> getMethodsPropertyEdge() {
     return this.methods;
   }
 
   public void addMethod(MethodDeclaration methodDeclaration) {
-    addIfNotContains(this.methods, methodDeclaration);
+    if (this.methodMap.containsKey(methodDeclaration.getName())) {
+      for (Integer ix : this.methodMap.get(methodDeclaration.getName())) {
+        if (this.methods.get(ix).equals(methodDeclaration)) {
+          return;
+        }
+      }
+    } else {
+      this.methodMap.put(methodDeclaration.getName(), new ArrayList<>());
+    }
+
+    addAndWrap(this.methods, methodDeclaration, true);
+    this.methodMap.get(methodDeclaration.getName()).add(this.methods.size() - 1);
+    methodDeclaration.setRecordDeclaration(this);
   }
 
   public void removeMethod(MethodDeclaration methodDeclaration) {
-    this.methods.removeIf(propertyEdge -> propertyEdge.getEnd().equals(methodDeclaration));
+    if (!this.methodMap.containsKey(methodDeclaration.getName())) {
+      return;
+    }
+
+    List<Integer> inxes = this.methodMap.get(methodDeclaration.getName());
+    for (int i = 0; i < inxes.size(); i++) {
+      Integer ix = inxes.get(i);
+
+      if (this.methods.get(ix).getEnd().equals(methodDeclaration)) {
+        inxes.remove(i);
+        i = i - 1;
+        this.methods.remove((int) ix);
+      }
+    }
   }
 
   public void setMethods(List<MethodDeclaration> methods) {
     this.methods = PropertyEdge.transformIntoOutgoingPropertyEdgeList(methods, this);
+    this.methodMap.clear();
+
+    for (int i = 0; i < methods.size(); i++) {
+      MethodDeclaration m = methods.get(i);
+
+      if (!this.methodMap.containsKey(m.getName())) {
+        this.methodMap.put(m.getName(), new ArrayList());
+      }
+
+      this.methodMap.get(m.getName()).add(i);
+    }
   }
 
   public List<ConstructorDeclaration> getConstructors() {
@@ -238,12 +290,10 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   }
 
   /**
-   * Combines both implemented interfaces and extended classes. This is most
-   * commonly what you are
+   * Combines both implemented interfaces and extended classes. This is most commonly what you are
    * looking for when looking for method call targets etc.
    *
-   * @return concatenation of {@link #getSuperClasses()} and
-   *         {@link #getImplementedInterfaces()}
+   * @return concatenation of {@link #getSuperClasses()} and {@link #getImplementedInterfaces()}
    */
   public List<Type> getSuperTypes() {
     return Stream.of(superClasses, implementedInterfaces)
@@ -252,8 +302,7 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   }
 
   /**
-   * The classes that are extended by this one. Usually zero or one, but in C++
-   * this can contain
+   * The classes that are extended by this one. Usually zero or one, but in C++ this can contain
    * multiple classes
    *
    * @return extended classes
@@ -273,6 +322,14 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
    */
   public void addSuperClass(Type superClass) {
     this.superClasses.add(superClass);
+  }
+
+  public Set<Type> getExternalSubTypes() {
+    return this.externalSubTypes;
+  }
+
+  public void addExternalSubType(Type subType) {
+    this.externalSubTypes.add(subType);
   }
 
   /**

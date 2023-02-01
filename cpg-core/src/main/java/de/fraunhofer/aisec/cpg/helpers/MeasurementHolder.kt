@@ -205,9 +205,9 @@ constructor(
 
     fun logDebugMsg(msg: String) {
         if (debug) {
-            log.debug(msg)
+            log.error(msg)
         } else {
-            log.info(msg)
+            log.error(msg)
         }
     }
 

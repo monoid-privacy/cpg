@@ -64,7 +64,7 @@ class ScopeManager : ScopeProvider {
     private val scopeMap: MutableMap<Node?, Scope> = IdentityHashMap()
 
     /** A lookup map for each scope and its associated FQN. */
-    private val fqnScopeMap: MutableMap<String, NameScope> = IdentityHashMap()
+    private val fqnScopeMap: MutableMap<String, NameScope> = HashMap()
 
     /** The currently active scope. */
     var currentScope: Scope? = null
@@ -142,11 +142,13 @@ class ScopeManager : ScopeProvider {
                 val existing = fqnScopeMap[entry.key]
                 if (existing != null) {
                     // a name scope with an identical FQN already exist. we transfer all
-                    // declarations over to it. We are NOT using [addValueDeclaration] because this
-                    // will add it to the underlying AST node as well. This was already done by the
+                    // declarations over to it. Adding to the AST was already done by the
                     // respective sub-scope manager. We add it directly to the declarations array
                     // instead.
-                    existing.valueDeclarations.addAll(entry.value.valueDeclarations)
+                    for (decl in entry.value.valueDeclarations) {
+                        existing.addValueDeclaration(decl, false)
+                    }
+
                     existing.structureDeclarations.addAll(entry.value.structureDeclarations)
 
                     // copy over the typedefs as well just to be sure
@@ -661,9 +663,9 @@ class ScopeManager : ScopeProvider {
     @JvmOverloads
     fun resolveFunction(
         call: CallExpression,
-        scope: Scope? = currentScope
+        resScope: Scope? = currentScope
     ): List<FunctionDeclaration> {
-        var s = scope
+        var scope = resScope
 
         val fqn = call.fqn
 
@@ -678,30 +680,64 @@ class ScopeManager : ScopeProvider {
             // TODO: proper scope selection
 
             // this is a scoped call. we need to explicitly jump to that particular scope
-            val scopes = filterScopes { (it is NameScope && it.scopedName == scopeName) }
-            s =
-                if (scopes.isEmpty()) {
-                    LOGGER.error(
-                        "Could not find the scope {} needed to resolve the call {}. Falling back to the current scope",
-                        scopeName,
-                        call.fqn
-                    )
-                    currentScope
-                } else {
-                    scopes[0]
-                }
+            var scope: Scope? = lookupScope(scopeName)
+            if (scope == null) {
+                LOGGER.warn(
+                    "Could not find the scope {} needed to resolve the call {}. Falling back to the current scope",
+                    scopeName,
+                    call.fqn
+                )
+                scope = currentScope
+            }
         }
 
-        val res =
-            resolve(
-                s,
-                false,
-                { it: FunctionDeclaration ->
-                    it.name == call.name && it.hasSignature(call.signature)
-                }
-            )
+        val declarations = mutableListOf<FunctionDeclaration>()
+        val predicate = { it: FunctionDeclaration ->
+            it.name == call.name && it.hasSignature(call.signature)
+        }
 
-        return res
+        while (scope != null) {
+            if (scope is ValueDeclarationScope) {
+                declarations.addAll(
+                    scope.valueDeclarationsMap[call.name]?.filterIsInstance<FunctionDeclaration>()
+                        ?: emptyList()
+                )
+            }
+
+            if (scope is StructureDeclarationScope) {
+                var list =
+                    scope.structureDeclarations
+                        .filterIsInstance<FunctionDeclaration>()
+                        .filter(predicate)
+
+                // this was taken over from the old resolveStructureDeclaration.
+                // TODO(oxisto): why is this only when the list is empty?
+                if (list.isEmpty()) {
+                    for (declaration in scope.structureDeclarations) {
+                        if (declaration is RecordDeclaration) {
+                            list =
+                                declaration.templates
+                                    .filterIsInstance<FunctionDeclaration>()
+                                    .filter(predicate)
+                        }
+                    }
+                }
+
+                declarations.addAll(list)
+            }
+
+            // some (all?) languages require us to stop immediately if we found something on this
+            // scope. This is the case where function overloading is allowed, but only within the
+            // same scope
+            if (declarations.isNotEmpty()) {
+                return declarations
+            }
+
+            // go upwards in the scope tree
+            scope = scope.parent
+        }
+
+        return declarations
     }
 
     fun resolveFunctionStopScopeTraversalOnDefinition(

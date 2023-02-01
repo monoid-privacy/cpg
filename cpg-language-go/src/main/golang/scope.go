@@ -34,6 +34,7 @@ const PassesPackage = CPGPackage + "/passes"
 const ScopesPackage = PassesPackage + "/scopes"
 const ScopeManagerClass = ScopesPackage + "/ScopeManager"
 const ScopeClass = ScopesPackage + "/Scope"
+const NameScopeClass = ScopesPackage + "/NameScope"
 
 func (s *ScopeManager) EnterScope(n *Node) {
 	(*jnigi.ObjectRef)(s).CallMethod(env, "enterScope", nil, (*jnigi.ObjectRef)(n).Cast(NodeClass))
@@ -53,6 +54,13 @@ func (s *ScopeManager) ResetToGlobal(n *Node) {
 func (s *ScopeManager) GetCurrentScope() *Scope {
 	var o = jnigi.NewObjectRef(ScopeClass)
 	(*jnigi.ObjectRef)(s).CallMethod(env, "getCurrentScope", o)
+
+	return (*Scope)(o)
+}
+
+func (s *ScopeManager) LookupScope(fqn string) *Scope {
+	var o = jnigi.NewObjectRef(NameScopeClass)
+	(*jnigi.ObjectRef)(s).CallMethod(env, "lookupScope", o, NewString(fqn))
 
 	return (*Scope)(o)
 }

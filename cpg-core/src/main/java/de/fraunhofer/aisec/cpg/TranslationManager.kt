@@ -230,7 +230,6 @@ private constructor(
 
             if (!config.typeSystemActiveInFrontend) {
                 TypeManager.setTypeSystemActive(true)
-                log.warn("ITft")
 
                 result.components.forEach { s ->
                     s.translationUnits.forEach {

@@ -85,6 +85,28 @@ public interface DeclarationHolder {
     }
   }
 
+  default <T extends Node> void addAndWrap(
+      Collection<PropertyEdge<T>> collection, T declaration, boolean outgoing) {
+    var propertyEdge =
+        outgoing
+            ? new PropertyEdge<>((Node) this, declaration)
+            : new PropertyEdge<>(declaration, (T) this);
+
+    // set the index property
+    propertyEdge.addProperty(Properties.INDEX, collection.size());
+
+    collection.add(propertyEdge);
+  }
+
+  default <T extends Node> T getAndUnwrap(List<PropertyEdge<T>> lst, int inx, boolean outgoing) {
+    PropertyEdge<T> propertyEdge = lst.get(inx);
+    if (outgoing) {
+      return (T) propertyEdge.getEnd();
+    }
+
+    return (T) propertyEdge.getStart();
+  }
+
   @NotNull
   List<Declaration> getDeclarations();
 }

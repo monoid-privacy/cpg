@@ -30,13 +30,17 @@ import de.fraunhofer.aisec.cpg.frontends.*
 import de.fraunhofer.aisec.cpg.frontends.HasFunctionPointers
 import de.fraunhofer.aisec.cpg.frontends.HasImplicitInterfaces
 import de.fraunhofer.aisec.cpg.frontends.HasNoClassScope
+import de.fraunhofer.aisec.cpg.frontends.HasNoMultipleFunctionNames
 import de.fraunhofer.aisec.cpg.frontends.HasShortCircuitOperators
 import de.fraunhofer.aisec.cpg.graph.declarations.*
+import de.fraunhofer.aisec.cpg.graph.newVariableDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.MemberCallExpression
 import de.fraunhofer.aisec.cpg.graph.types.PointerType
 import de.fraunhofer.aisec.cpg.graph.types.Type
 import de.fraunhofer.aisec.cpg.passes.CallResolver
+import de.fraunhofer.aisec.cpg.passes.inference.inferMethod
+import de.fraunhofer.aisec.cpg.passes.inference.startInference
 import de.fraunhofer.aisec.cpg.passes.scopes.NameScope
 import de.fraunhofer.aisec.cpg.passes.scopes.Scope
 import de.fraunhofer.aisec.cpg.passes.scopes.ScopeManager
@@ -51,7 +55,8 @@ open class GoLanguage :
     HasComplexCallResolution,
     HasImplicitInterfaces,
     HasNoClassScope,
-    HasFunctionPointers {
+    HasFunctionPointers,
+    HasNoMultipleFunctionNames {
     override val fileExtensions = listOf("go")
     override val namespaceDelimiter = "."
     override val frontend: KClass<out GoLanguageFrontend> = GoLanguageFrontend::class
@@ -80,6 +85,22 @@ open class GoLanguage :
         callResolver: CallResolver
     ): List<FunctionDeclaration> {
         var invocationCandidates = mutableListOf<FunctionDeclaration>()
+
+        val externalRecordTypes =
+            possibleContainingTypes.filter { it.root.typeName !in callResolver.recordMap }
+
+        if (externalRecordTypes.size != possibleContainingTypes.size) {
+            for (recordType in externalRecordTypes) {
+                val record =
+                    recordType.root
+                        .startInference()
+                        .inferRecordDeclaration(recordType.root, currentTU)
+
+                // update the record map
+                if (record != null) callResolver.recordMap[recordType.root.typeName] = record
+            }
+        }
+
         val records =
             possibleContainingTypes.mapNotNull { callResolver.recordMap[it.root.typeName] }.toSet()
 
@@ -117,7 +138,7 @@ open class GoLanguage :
                         ]
                 }
                 .filter {
-                    it.methods
+                    it.methodsWithName(call.name)
                         .filter { m ->
                             namePattern.matcher(m.name).matches() && m.hasSignature(call.signature)
                         }
@@ -126,7 +147,7 @@ open class GoLanguage :
                 .firstOrNull()
 
         if (embField == null) {
-            return mutableListOf<FunctionDeclaration>()
+            return listOf<FunctionDeclaration>()
         }
 
         return refineInvocationCandidatesFromRecord(embField, call, namePattern, callResolver)
@@ -140,9 +161,13 @@ open class GoLanguage :
     ): List<FunctionDeclaration> {
         var invocationCandidate =
             mutableListOf<FunctionDeclaration>(
-                *recordDeclaration.methods
+                *recordDeclaration
+                    .methodsWithName(call.name)
                     .filter { m ->
-                        namePattern.matcher(m.name).matches() && m.hasSignature(call.signature)
+                        val nameMatch = namePattern.matcher(m.name).matches()
+                        val signMatch = m.hasSignature(call.signature)
+
+                        nameMatch && signMatch
                     }
                     .toTypedArray()
             )
@@ -159,12 +184,35 @@ open class GoLanguage :
                                     else it.type.typeName
                                 ]
                         }
-                        .flatMap { it.methods }
+                        .flatMap { it.methodsWithName(call.name) }
                         .filter { m ->
                             namePattern.matcher(m.name).matches() && m.hasSignature(call.signature)
                         }
                         .toTypedArray()
                 )
+        }
+
+        if (invocationCandidate.isEmpty()) {
+            val method = recordDeclaration.inferMethod(call)
+            method.receiver =
+                recordDeclaration.newVariableDeclaration(null, recordDeclaration.toType())
+            method.addPrevDFG(method.receiver!!)
+
+            for (p in method.parameters) {
+                method.addPrevDFG(p)
+            }
+
+            invocationCandidate.add(method)
+        }
+
+        for (cand in invocationCandidate) {
+            if (!cand.isInferred) continue
+            if (cand !is MethodDeclaration) continue
+            if (call !is MemberCallExpression) continue
+
+            if (call.base != null) {
+                cand.receiver?.addPrevDFG(call.base!!)
+            }
         }
 
         return invocationCandidate

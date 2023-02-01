@@ -76,6 +76,7 @@ open class VariableUsageResolver : SymbolResolverPass() {
         config = result.config
 
         walker = ScopedWalker(scopeManager)
+        log.error("Collecting")
         for (tu in result.translationUnits) {
             currentTU = tu
             walker.clearCallbacks()
@@ -84,20 +85,25 @@ open class VariableUsageResolver : SymbolResolverPass() {
             walker.registerHandler { node, _ -> findEnums(node) }
             walker.iterate(currentTU)
         }
+        log.error("ECollecting")
 
         collectSupertypes()
 
+        log.error("Resolving Field")
         for (tu in result.translationUnits) {
             walker.clearCallbacks()
             walker.registerHandler { curClass, _, node -> resolveFieldUsages(curClass, node) }
             walker.iterate(tu)
         }
+        log.error("EResolving Field")
 
+        log.error("Resolving Local")
         for (tu in result.translationUnits) {
             walker.clearCallbacks()
             walker.registerHandler(::resolveLocalVarUsage)
             walker.iterate(tu)
         }
+        log.error("EResolving Local")
 
         for (tu in result.translationUnits) {
             walker.clearCallbacks()
@@ -118,6 +124,16 @@ open class VariableUsageResolver : SymbolResolverPass() {
                 }
 
                 subtypes[iface.typeName]!!.add(record.toType())
+            }
+
+            for (ext in record.getExternalSubTypes()) {
+                val typ = record.toType()
+
+                if (typ.typeName !in subtypes) {
+                    subtypes[typ.typeName] = mutableSetOf<Type>()
+                }
+
+                subtypes[typ.typeName]!!.add(ext)
             }
         }
 

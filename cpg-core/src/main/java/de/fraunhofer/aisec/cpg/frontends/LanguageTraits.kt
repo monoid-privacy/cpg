@@ -90,6 +90,8 @@ interface HasComplexCallResolution : LanguageTrait {
     ): List<FunctionDeclaration>
 }
 
+interface HasNoMultipleFunctionNames : LanguageTrait
+
 interface HasImplicitInterfaces : LanguageTrait
 
 interface HasNoClassScope : LanguageTrait
