@@ -44,7 +44,6 @@ import de.fraunhofer.aisec.cpg.passes.order.DependsOn
 import de.fraunhofer.aisec.cpg.passes.order.ExecuteBefore
 import de.fraunhofer.aisec.cpg.passes.order.RequiredLanguageTrait
 import java.util.*
-import java.util.function.Consumer
 
 /**
  * This [Pass] is responsible for resolving function pointer calls, i.e., [CallExpression] nodes
@@ -96,14 +95,15 @@ class FunctionPointerCallResolver : Pass() {
         // resolve the call expression to a declaration that contains the pointer.
         val pointer =
             scopeManager
-                .resolve<ValueDeclaration>(scopeManager.currentScope, true) {
+                .resolveName<ValueDeclaration>(scopeManager.currentScope, call.name, true) {
                     (it.type is FunctionPointerType ||
-                        (it.type is FunctionType && it !is FunctionDeclaration)) &&
-                        it.name == call.name
+                        (it.type is FunctionType && it !is FunctionDeclaration))
                 }
                 ?.firstOrNull()
         if (pointer != null) {
+            log.error("Handling fp call")
             handleFunctionPointerCall(call, pointer)
+            log.error("Handled fp call")
         }
     }
 
@@ -133,12 +133,15 @@ class FunctionPointerCallResolver : Pass() {
         if (pointerType == null) return
 
         val invocationCandidates: MutableList<FunctionDeclaration> = ArrayList()
-        val work: Deque<Node> = ArrayDeque()
+        val work = mutableListOf<Node>()
         val seen = IdentitySet<Node>()
-        work.push(pointer)
+        work.add(pointer)
+
         while (!work.isEmpty()) {
-            val curr = work.pop()
-            if (!seen.add(curr)) {
+            val curr = work.removeLast()
+            val s = seen.add(curr)
+
+            if (!s) {
                 continue
             }
 
@@ -161,12 +164,18 @@ class FunctionPointerCallResolver : Pass() {
                     continue
                 }
             }
-            curr.prevDFG.forEach(Consumer(work::push))
+
+            work.addAll(curr.prevDFG)
+        }
+
+        if (invocationCandidates.size > 3) {
+            return
         }
 
         call.invokes = invocationCandidates
         // We have to update the dfg edges because this call could now be resolved (which was not
         // the case before).
+
         DFGPass().handleCallExpression(call, inferDfgForUnresolvedCalls)
     }
 

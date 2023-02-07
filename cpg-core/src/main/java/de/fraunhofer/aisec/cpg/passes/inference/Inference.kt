@@ -282,7 +282,7 @@ class Inference(val start: Node) : LanguageProvider, IsInferredProvider {
         if (type !is ObjectType) {
             log.error(
                 "Trying to infer a record declaration of a non-object type. Not sure what to do? Should we change the type?" +
-                type
+                    type
             )
             return null
         }

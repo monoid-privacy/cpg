@@ -29,7 +29,7 @@ import de.fraunhofer.aisec.cpg.graph.HasDefault;
 import de.fraunhofer.aisec.cpg.graph.HasType;
 import de.fraunhofer.aisec.cpg.graph.SubGraph;
 import de.fraunhofer.aisec.cpg.graph.types.Type;
-import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
 import org.jetbrains.annotations.Nullable;
 import org.neo4j.ogm.annotation.Relationship;
@@ -73,13 +73,12 @@ public class TypeParamDeclaration extends ValueDeclaration
   }
 
   @Override
-  public void updateType(Collection<Type> typeState) {
+  public void updateType(Map<Type, Type> typeState) {
     Type oldType = this.getDefault();
     if (oldType != null) {
-      for (Type t : typeState) {
-        if (t.equals(oldType)) {
-          this.setDefault(t);
-        }
+      Type t = typeState.get(oldType);
+      if (t != null) {
+        this.setDefault(t);
       }
     }
   }

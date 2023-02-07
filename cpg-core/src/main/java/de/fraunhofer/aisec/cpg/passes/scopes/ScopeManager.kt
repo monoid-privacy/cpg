@@ -149,7 +149,9 @@ class ScopeManager : ScopeProvider {
                         existing.addValueDeclaration(decl, false)
                     }
 
-                    existing.structureDeclarations.addAll(entry.value.structureDeclarations)
+                    for (sd in entry.value.structureDeclarations) {
+                        existing.addDeclaration(sd, false)
+                    }
 
                     // copy over the typedefs as well just to be sure
                     existing.typedefs.putAll(entry.value.typedefs)
@@ -627,8 +629,8 @@ class ScopeManager : ScopeProvider {
         ref: DeclaredReferenceExpression,
         scope: Scope? = currentScope
     ): ValueDeclaration? {
-        return resolve<ValueDeclaration>(scope) {
-                if (it.name == ref.name) {
+        val res =
+            resolveName<ValueDeclaration>(scope, ref.name) {
                     // If the reference seems to point to a function the entire signature is checked
                     // for equality
                     if (ref.type is FunctionPointerType && it is FunctionDeclaration) {
@@ -642,16 +644,16 @@ class ScopeManager : ScopeProvider {
                                     .isEmpty() &&
                                 it.hasSignature(fptrType.parameters)
                         ) {
-                            return@resolve true
+                            return@resolveName true
                         }
-                    } else {
-                        return@resolve true
-                    }
-                }
 
-                return@resolve false
-            }
-            .firstOrNull()
+                        return@resolveName false
+                    }
+
+                    return@resolveName true
+                }
+                .firstOrNull()
+        return res
     }
 
     /**
@@ -691,53 +693,9 @@ class ScopeManager : ScopeProvider {
             }
         }
 
-        val declarations = mutableListOf<FunctionDeclaration>()
-        val predicate = { it: FunctionDeclaration ->
+        return resolveName<FunctionDeclaration>(scope, call.name) { it: FunctionDeclaration ->
             it.name == call.name && it.hasSignature(call.signature)
         }
-
-        while (scope != null) {
-            if (scope is ValueDeclarationScope) {
-                declarations.addAll(
-                    scope.valueDeclarationsMap[call.name]?.filterIsInstance<FunctionDeclaration>()
-                        ?: emptyList()
-                )
-            }
-
-            if (scope is StructureDeclarationScope) {
-                var list =
-                    scope.structureDeclarations
-                        .filterIsInstance<FunctionDeclaration>()
-                        .filter(predicate)
-
-                // this was taken over from the old resolveStructureDeclaration.
-                // TODO(oxisto): why is this only when the list is empty?
-                if (list.isEmpty()) {
-                    for (declaration in scope.structureDeclarations) {
-                        if (declaration is RecordDeclaration) {
-                            list =
-                                declaration.templates
-                                    .filterIsInstance<FunctionDeclaration>()
-                                    .filter(predicate)
-                        }
-                    }
-                }
-
-                declarations.addAll(list)
-            }
-
-            // some (all?) languages require us to stop immediately if we found something on this
-            // scope. This is the case where function overloading is allowed, but only within the
-            // same scope
-            if (declarations.isNotEmpty()) {
-                return declarations
-            }
-
-            // go upwards in the scope tree
-            scope = scope.parent
-        }
-
-        return declarations
     }
 
     fun resolveFunctionStopScopeTraversalOnDefinition(
@@ -783,6 +741,55 @@ class ScopeManager : ScopeProvider {
                         }
                     }
                 }
+
+                declarations.addAll(list)
+            }
+
+            // some (all?) languages require us to stop immediately if we found something on this
+            // scope. This is the case where function overloading is allowed, but only within the
+            // same scope
+            if (stopIfFound && declarations.isNotEmpty()) {
+                return declarations
+            }
+
+            // go upwards in the scope tree
+            scope = scope.parent
+        }
+
+        return declarations
+    }
+
+    inline fun <reified T : Declaration> resolveName(
+        searchScope: Scope?,
+        name: String,
+        stopIfFound: Boolean = false,
+        predicate: (T) -> Boolean
+    ): List<T> {
+        var scope = searchScope
+        val declarations = mutableListOf<T>()
+
+        while (scope != null) {
+            if (scope is ValueDeclarationScope) {
+                declarations.addAll(
+                    scope.valueDeclarationsMap[name]?.filterIsInstance<T>()?.filter(predicate)
+                        ?: emptyList()
+                )
+            }
+
+            if (scope is StructureDeclarationScope) {
+                var list =
+                    scope.structureDeclarationsMap[name]?.filterIsInstance<T>()?.filter(predicate)
+                        ?: emptyList()
+
+                // this was taken over from the old resolveStructureDeclaration.
+                // TODO(oxisto): why is this only when the list is empty?
+                // if (list.isEmpty()) {
+                //     for (declaration in scope.structureDeclarations) {
+                //         if (declaration is RecordDeclaration) {
+                //             list = declaration.templates.filterIsInstance<T>().filter(predicate)
+                //         }
+                //     }
+                // }
 
                 declarations.addAll(list)
             }

@@ -335,12 +335,11 @@ open class CallExpression : Expression(), HasType.TypeListener, HasBase, Seconda
         return super.hashCode()
     }
 
-    override fun updateType(typeState: Collection<Type>) {
+    override fun updateType(typeState: Map<Type, Type>) {
         for (t in typeTemplateParameters) {
-            for (t2 in typeState) {
-                if (t2 == t) {
-                    replaceTypeTemplateParameter(t, t2)
-                }
+            val t2 = typeState[t]
+            if (t2 != null) {
+                replaceTypeTemplateParameter(t, t2)
             }
         }
     }

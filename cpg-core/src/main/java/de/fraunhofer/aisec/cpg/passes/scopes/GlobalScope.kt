@@ -35,7 +35,10 @@ class GlobalScope : StructureDeclarationScope(null) {
      */
     fun mergeFrom(others: Collection<GlobalScope>) {
         for (other in others) {
-            structureDeclarations.addAll(other.structureDeclarations)
+            for (sd in other.structureDeclarations) {
+                addDeclaration(sd, false)
+            }
+
             for (valdec in other.valueDeclarations) {
                 addValueDeclaration(valdec, false)
             }

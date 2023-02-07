@@ -57,11 +57,13 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   @SubGraph("AST")
   private List<PropertyEdge<FieldDeclaration>> fields = new ArrayList<>();
 
+  @Transient private Map<String, List<Integer>> fieldMap = new HashMap<>();
+
   @Relationship(value = "METHODS", direction = "OUTGOING")
   @SubGraph("AST")
   private List<PropertyEdge<MethodDeclaration>> methods = new ArrayList<>();
 
-  private Map<String, List<Integer>> methodMap = new HashMap<>();
+  @Transient private Map<String, List<Integer>> methodMap = new HashMap<>();
 
   @Relationship(value = "CONSTRUCTORS", direction = "OUTGOING")
   @SubGraph("AST")
@@ -83,7 +85,7 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   @Transient private List<Type> superClasses = new ArrayList<>();
   @Transient private List<Type> implementedInterfaces = new ArrayList<>();
 
-  @org.neo4j.ogm.annotation.Relationship private Set<Type> externalSubTypes = new HashSet<>();
+  private Set<Type> externalSubTypes = new HashSet<>();
 
   @org.neo4j.ogm.annotation.Relationship
   private Set<RecordDeclaration> superTypeDeclarations = new HashSet<>();
@@ -127,20 +129,57 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   }
 
   public void addField(FieldDeclaration fieldDeclaration) {
-    addIfNotContains(this.fields, fieldDeclaration);
+    if (this.fieldMap.containsKey(fieldDeclaration.getName())) {
+      for (Integer ix : this.fieldMap.get(fieldDeclaration.getName())) {
+        if (this.fields.get(ix).equals(fieldDeclaration)) {
+          return;
+        }
+      }
+    } else {
+      this.fieldMap.put(fieldDeclaration.getName(), new ArrayList<>());
+    }
+
+    addAndWrap(this.fields, fieldDeclaration, true);
+    this.fieldMap.get(fieldDeclaration.getName()).add(this.fields.size() - 1);
     fieldDeclaration.setRecord(this);
   }
 
   public void removeField(FieldDeclaration fieldDeclaration) {
-    this.fields.removeIf(propertyEdge -> propertyEdge.getEnd().equals(fieldDeclaration));
+    if (!this.fieldMap.containsKey(fieldDeclaration.getName())) {
+      return;
+    }
+
+    List<Integer> inxes = this.fieldMap.get(fieldDeclaration.getName());
+    for (int i = 0; i < inxes.size(); i++) {
+      Integer ix = inxes.get(i);
+
+      if (this.fields.get(ix).getEnd().equals(fieldDeclaration)) {
+        inxes.remove(i);
+        i = i - 1;
+        this.fields.remove((int) ix);
+      }
+    }
+
     if (fieldDeclaration.getRecord() == this) {
-      fieldDeclaration.setRecord(this);
+      fieldDeclaration.setRecord(null);
     }
   }
 
   public void setFields(List<FieldDeclaration> fields) {
     List<FieldDeclaration> oldFields = unwrap(this.fields);
     this.fields = PropertyEdge.transformIntoOutgoingPropertyEdgeList(fields, this);
+
+    this.fieldMap.clear();
+
+    for (int i = 0; i < fields.size(); i++) {
+      FieldDeclaration f = fields.get(i);
+
+      if (!this.fieldMap.containsKey(f.getName())) {
+        this.fieldMap.put(f.getName(), new ArrayList());
+      }
+
+      this.fieldMap.get(f.getName()).add(i);
+    }
 
     for (FieldDeclaration f : oldFields) {
       if (f.getRecord() == this) {
@@ -151,6 +190,21 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
     for (FieldDeclaration f : unwrap(this.fields)) {
       f.setRecord(this);
     }
+  }
+
+  public List<FieldDeclaration> fieldsWithName(String name) {
+    List<FieldDeclaration> res = new ArrayList<>();
+    List<Integer> inxs = this.fieldMap.get(name);
+
+    if (inxs == null) {
+      return res;
+    }
+
+    for (Integer ix : inxs) {
+      res.add(getAndUnwrap(this.fields, ix, true));
+    }
+
+    return res;
   }
 
   public List<MethodDeclaration> getMethods() {

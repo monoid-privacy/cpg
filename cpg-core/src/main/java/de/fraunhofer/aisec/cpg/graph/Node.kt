@@ -51,6 +51,7 @@ import org.neo4j.ogm.annotation.Id
 import org.neo4j.ogm.annotation.Relationship
 import org.neo4j.ogm.annotation.Transient
 import org.neo4j.ogm.annotation.typeconversion.Convert
+import org.neo4j.ogm.typeconversion.AttributeConverter
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -60,6 +61,18 @@ enum class DFGTagDirection {
 }
 
 data class DFGTag(val tag: String, val direction: DFGTagDirection)
+
+class MapConverter : AttributeConverter<Map<Node, DFGTag?>, Set<Node>> {
+    override fun toGraphProperty(value: Map<Node, DFGTag?>): Set<Node> {
+        print("To Graph Property: " + value + "\n")
+        return emptySet()
+        return value.keys
+    }
+
+    override fun toEntityAttribute(value: Set<Node>): Map<Node, DFGTag?> {
+        return value.map { it to null }.toMap()
+    }
+}
 
 /** The base class for all graph objects that are going to be persisted in the database. */
 open class Node : IVisitable<Node>, Persistable, LanguageProvider, ScopeProvider {
@@ -99,7 +112,7 @@ open class Node : IVisitable<Node>, Persistable, LanguageProvider, ScopeProvider
      * the declaration itself creates a [RecordScope], the scope of a [MethodDeclaration] within the
      * class would be a [RecordScope] pointing to the [RecordDeclaration].
      */
-    override var scope: Scope? = null
+    @JsonBackReference override var scope: Scope? = null
 
     /** Optional comment of this node. */
     var comment: String? = null
@@ -155,17 +168,14 @@ open class Node : IVisitable<Node>, Persistable, LanguageProvider, ScopeProvider
             this.nextEOGEdges = PropertyEdge.transformIntoOutgoingPropertyEdgeList(value, this)
         }
 
-    var prevDFGMap: MutableMap<Node, DFGTag?> = HashMap()
+    @field:Transient var prevDFGMap: MutableMap<Node, DFGTag?> = HashMap()
 
     @field:Relationship(value = "DFG", direction = "INCOMING")
-    var prevDFG: Set<Node> = emptySet()
-        get() = prevDFGMap.keys
+    var prevDFG: MutableSet<Node> = mutableSetOf<Node>()
 
-    var nextDFGMap: MutableMap<Node, DFGTag?> = HashMap()
+    @field:Transient var nextDFGMap: MutableMap<Node, DFGTag?> = HashMap()
 
-    @field:Relationship(value = "DFG")
-    var nextDFG: Set<Node> = emptySet()
-        get() = nextDFGMap.keys
+    @field:Relationship(value = "DFG") var nextDFG: MutableSet<Node> = mutableSetOf<Node>()
 
     var typedefs: MutableSet<TypedefDeclaration> = HashSet()
 
@@ -218,7 +228,10 @@ open class Node : IVisitable<Node>, Persistable, LanguageProvider, ScopeProvider
 
     fun addNextDFG(next: Node, tag: DFGTag?) {
         nextDFGMap[next] = tag
+        nextDFG.add(next)
+
         next.prevDFGMap[this] = tag
+        next.prevDFG.add(this)
     }
 
     fun addNextDFG(prev: Node) {
@@ -228,7 +241,10 @@ open class Node : IVisitable<Node>, Persistable, LanguageProvider, ScopeProvider
     fun removeNextDFG(next: Node?) {
         if (next != null) {
             nextDFGMap.remove(next)
+            nextDFG.remove(next)
+
             next.prevDFGMap.remove(this)
+            next.prevDFG.remove(this)
         }
     }
 
@@ -238,21 +254,31 @@ open class Node : IVisitable<Node>, Persistable, LanguageProvider, ScopeProvider
 
     fun addPrevDFG(prev: Node, tag: DFGTag?) {
         prevDFGMap[prev] = tag
+        prevDFG.add(prev)
+
         prev.nextDFGMap[this] = tag
+        prev.nextDFG.add(this)
     }
 
     fun addAllPrevDFG(prev: Collection<Node>) {
         for (n in prev) {
             prevDFGMap[n] = null
+            prevDFG.add(n)
         }
 
-        prev.forEach { it.nextDFGMap[this] = null }
+        prev.forEach {
+            it.nextDFGMap[this] = null
+            it.nextDFG.add(this)
+        }
     }
 
     fun removePrevDFG(prev: Node?) {
         if (prev != null) {
             prevDFGMap.remove(prev)
+            prevDFG.remove(prev)
+
             prev.nextDFGMap.remove(this)
+            prev.nextDFG.remove(this)
         }
     }
 
@@ -288,13 +314,17 @@ open class Node : IVisitable<Node>, Persistable, LanguageProvider, ScopeProvider
     fun disconnectFromGraph() {
         for (n in nextDFG) {
             n.prevDFGMap.remove(this)
+            n.prevDFG.remove(this)
         }
         nextDFGMap.clear()
+        prevDFG.clear()
 
         for (n in prevDFG) {
             n.nextDFGMap.remove(this)
+            n.nextDFG.remove(this)
         }
         prevDFGMap.clear()
+        prevDFG.clear()
 
         for (n in nextEOGEdges) {
             val remove =

@@ -155,10 +155,10 @@ open class VariableUsageResolver : SymbolResolverPass() {
 
             val k = fieldInit.key
 
-            if (k !is Literal<*>) continue
+            if (k !is Literal<*> || k.value !is String) continue
 
             val member =
-                record!!.fields.filter { it.name == k.value }.map { it.definition }.firstOrNull()
+                record!!.fieldsWithName(k.value as String).map { it.definition }.firstOrNull()
 
             if (member == null) continue
 
@@ -226,7 +226,11 @@ open class VariableUsageResolver : SymbolResolverPass() {
         }
 
         // only consider resolving, if the language frontend did not specify a resolution
-        var refersTo = current.refersTo ?: scopeManager.resolveReference(current)
+        var refersTo: Declaration? = current.refersTo
+        if (refersTo == null) {
+            refersTo = scopeManager.resolveReference(current)
+        }
+
         // if (current.refersTo == null) scopeManager?.resolveReference(current)
         // else current.refersTo!!
         var recordDeclType: Type? = null
@@ -464,8 +468,7 @@ open class VariableUsageResolver : SymbolResolverPass() {
         if (containingClass !is UnknownType && containingClass.typeName in recordMap) {
             member =
                 recordMap[containingClass.typeName]!!
-                    .fields
-                    .filter { it.name == simpleName }
+                    .fieldsWithName(simpleName)
                     .map { it.definition }
                     .firstOrNull()
         }
@@ -475,8 +478,7 @@ open class VariableUsageResolver : SymbolResolverPass() {
                 superTypesMap
                     .getOrDefault(containingClass.typeName, listOf())
                     .mapNotNull { recordMap[it.typeName] }
-                    .flatMap { it.fields }
-                    .filter { it.name == simpleName }
+                    .flatMap { it.fieldsWithName(simpleName) }
                     .map { it.definition }
                     .firstOrNull()
         }
@@ -517,7 +519,7 @@ open class VariableUsageResolver : SymbolResolverPass() {
             return null
         }
 
-        var target: ValueDeclaration? = recordDeclaration.fields.firstOrNull { it.name == name }
+        var target: ValueDeclaration? = recordDeclaration.fieldsWithName(name).firstOrNull()
         if (target != null) {
             return target
         }
@@ -537,8 +539,7 @@ open class VariableUsageResolver : SymbolResolverPass() {
                         else it.type.typeName
                     ]
                 }
-                .flatMap { it.fields }
-                .filter { it.name == name }
+                .flatMap { it.fieldsWithName(name) }
                 .map { it.definition }
                 .firstOrNull()
 
