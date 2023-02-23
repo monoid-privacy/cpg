@@ -162,8 +162,9 @@ private constructor(
                         Files.find(
                                 file.toPath(),
                                 999,
-                                { _: Path?, fileAttr: BasicFileAttributes ->
-                                    fileAttr.isRegularFile
+                                { p: Path?, fileAttr: BasicFileAttributes ->
+                                    fileAttr.isRegularFile &&
+                                        !(p?.any { it.toString().contains("test") } ?: false)
                                 }
                             )
                             .map { it.toFile() }
@@ -188,6 +189,7 @@ private constructor(
                         listOf(file)
                     }
                 }
+
             if (config.useUnityBuild) {
                 val tmpFile = Files.createTempFile("compile", ".cpp").toFile()
                 tmpFile.deleteOnExit()
@@ -345,7 +347,7 @@ private constructor(
             frontend = getFrontend(sourceLocation, scopeManager)
 
             if (frontend == null) {
-                log.error("Found no parser frontend for ${sourceLocation.name}")
+                log.warn("Found no parser frontend for ${sourceLocation.name}")
 
                 if (config.failOnError) {
                     throw TranslationException(

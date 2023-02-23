@@ -89,7 +89,7 @@ func (c *CastExpression) SetExpression(e *Expression) {
 }
 
 func (c *CastExpression) SetCastType(t *Type) {
-	(*jnigi.ObjectRef)(c).CallMethod(env, "setCastType", nil, t)
+	(*jnigi.ObjectRef)(c).CallMethod(env, "setCastType", nil, (*jnigi.ObjectRef)(t).Cast(TypeClass))
 }
 
 func (c *MemberCallExpression) SetName(s string) {

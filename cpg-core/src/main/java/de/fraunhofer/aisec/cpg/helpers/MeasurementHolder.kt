@@ -207,7 +207,7 @@ constructor(
         if (debug) {
             log.error(msg)
         } else {
-            log.error(msg)
+            log.debug(msg)
         }
     }
 

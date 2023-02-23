@@ -693,9 +693,12 @@ class ScopeManager : ScopeProvider {
             }
         }
 
-        return resolveName<FunctionDeclaration>(scope, call.name) { it: FunctionDeclaration ->
-            it.name == call.name && it.hasSignature(call.signature)
-        }
+        val res =
+            resolveName<FunctionDeclaration>(scope, call.name) { it: FunctionDeclaration ->
+                it.name == call.name && it.hasSignature(call.signature)
+            }
+
+        return res
     }
 
     fun resolveFunctionStopScopeTraversalOnDefinition(

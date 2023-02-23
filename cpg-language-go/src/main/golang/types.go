@@ -36,7 +36,7 @@ import (
 
 var env *jnigi.Env
 
-type Type struct{ *jnigi.ObjectRef }
+type Type Node
 
 const TypesPackage = GraphPackage + "/types"
 const TypeClass = TypesPackage + "/Type"
@@ -46,15 +46,6 @@ const TypeParserClass = TypesPackage + "/TypeParser"
 const PointerTypeClass = TypesPackage + "/PointerType"
 const FunctionTypeClass = TypesPackage + "/FunctionType"
 const PointerOriginClass = PointerTypeClass + "$PointerOrigin"
-
-func (t *Type) ConvertToGo(o *jnigi.ObjectRef) error {
-	t.ObjectRef = o
-	return nil
-}
-
-func (t *Type) ConvertToJava() (obj *jnigi.ObjectRef, err error) {
-	return t.ObjectRef, nil
-}
 
 func (*Type) GetClassName() string {
 	return TypeClass
@@ -66,24 +57,24 @@ func (*Type) IsArray() bool {
 
 func (t *Type) GetName() string {
 	// A little bit hacky until we also convert node to a struct
-	return (*Node)(t.ObjectRef).GetName()
+	return (*Node)(t).GetName()
 }
 
-type ObjectType struct {
-	Type
+func (t *Type) Cast(className string) *jnigi.ObjectRef {
+	return (*jnigi.ObjectRef)(t).Cast(className)
 }
+
+type ObjectType Type
 
 func (*ObjectType) GetClassName() string {
 	return ObjectTypeClass
 }
 
-type UnknownType struct {
-	Type
-}
+type UnknownType Type
 
-func (*UnknownType) GetClassName() string {
-	return UnknownTypeClass
-}
+// func (*UnknownType) GetClassName() string {
+// 	return UnknownTypeClass
+// }
 
 type HasType jnigi.ObjectRef
 
@@ -92,81 +83,81 @@ func InitEnv(e *jnigi.Env) {
 }
 
 func TypeParser_createFrom(s string, l *Language) *Type {
-	var t Type
-	err := env.CallStaticMethod(TypeParserClass, "createFrom", &t, NewString(s), l)
+	var t = jnigi.NewObjectRef(TypeClass)
+	err := env.CallStaticMethod(TypeParserClass, "createFrom", t, NewString(s), l)
 	if err != nil {
 		log.Fatal(err)
 
 	}
 
-	return &t
+	return (*Type)(t)
 }
 
 func UnknownType_getUnknown(l *Language) *UnknownType {
-	var t UnknownType
-	err := env.CallStaticMethod(UnknownTypeClass, "getUnknownType", &t, l)
+	var t = jnigi.NewObjectRef(UnknownTypeClass)
+	err := env.CallStaticMethod(UnknownTypeClass, "getUnknownType", t, l)
 	if err != nil {
 		log.Fatal(err)
 
 	}
 
-	return &t
+	return (*UnknownType)(t)
 }
 
 func (t *Type) GetRoot() *Type {
-	var root Type
-	err := t.CallMethod(env, "getRoot", &root)
+	var root = jnigi.NewObjectRef(TypeClass)
+	err := (*jnigi.ObjectRef)(t).CallMethod(env, "getRoot", root)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &root
+	return (*Type)(root)
 }
 
 func (t *Type) Reference(o *jnigi.ObjectRef) *Type {
-	var refType Type
-	err := t.CallMethod(env, "reference", &refType, (*jnigi.ObjectRef)(o).Cast(PointerOriginClass))
+	var refType = jnigi.NewObjectRef(TypeClass)
+	err := (*jnigi.ObjectRef)(t).CallMethod(env, "reference", refType, (*jnigi.ObjectRef)(o).Cast(PointerOriginClass))
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &refType
+	return (*Type)(refType)
 }
 
 func (h *HasType) SetType(t *Type) {
 	if t != nil {
-		(*jnigi.ObjectRef)(h).CallMethod(env, "setType", nil, t.Cast(TypeClass))
+		(*jnigi.ObjectRef)(h).CallMethod(env, "setType", nil, (*Node)(t).Cast(TypeClass))
 	}
 }
 
 func (h *HasType) GetType() *Type {
-	var t Type
-	err := (*jnigi.ObjectRef)(h).CallMethod(env, "getType", &t)
+	var t = jnigi.NewObjectRef(TypeClass)
+	err := (*jnigi.ObjectRef)(h).CallMethod(env, "getType", t)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &t
+	return (*Type)(t)
 }
 
 func (t *ObjectType) AddGeneric(g *Type) {
 	// Stupid workaround, since casting does not work. See
 	// https://github.com/timob/jnigi/issues/60
-	var objType = jnigi.WrapJObject(uintptr(t.JObject()), ObjectTypeClass, false)
-	err := objType.CallMethod(env, "addGeneric", nil, g.Cast(TypeClass))
+	var objType = jnigi.WrapJObject(uintptr((*jnigi.ObjectRef)(t).JObject()), ObjectTypeClass, false)
+	err := objType.CallMethod(env, "addGeneric", nil, (*Node)(g).Cast(TypeClass))
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 func FunctionType_ComputeType(decl *FunctionDeclaration) (t *Type, err error) {
-	var funcType Type
+	var funcType = jnigi.NewObjectRef(TypeClass)
 
-	err = env.CallStaticMethod(FunctionTypeClass, "computeType", &t, decl)
+	err = env.CallStaticMethod(FunctionTypeClass, "computeType", funcType, decl)
 	if err != nil {
 		return nil, err
 	}
 
-	return &funcType, nil
+	return (*Type)(funcType), nil
 }

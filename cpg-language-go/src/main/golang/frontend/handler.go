@@ -857,6 +857,10 @@ func (this *GoLanguageFrontend) handleStmt(fset *token.FileSet, stmt ast.Stmt) (
 		s = (*cpg.Statement)(this.handleRangeStmnt(fset, v))
 	case *ast.GoStmt:
 		s = (*cpg.Statement)(this.handleExpr(fset, v.Call))
+	case *ast.DeferStmt:
+		s = (*cpg.Statement)(this.handleExpr(fset, v.Call))
+	case *ast.BranchStmt:
+		s = nil
 	case nil:
 		s = nil
 	default:
@@ -1020,9 +1024,9 @@ func (this *GoLanguageFrontend) addPossibleExternalSubtypes(destObj types.Type, 
 		}
 
 		assignCPGType := this.handleTypingType(assignType)
-		if record != nil && !record.IsNil() && assignCPGType != nil && !assignCPGType.IsNil() {
+		if record != nil && !record.IsNil() && assignCPGType != nil && !(*jnigi.ObjectRef)(assignCPGType).IsNil() {
 			if err := record.AddExternalSubType(assignCPGType); err != nil {
-				this.LogError("Error adding subtype: %v", err)
+				this.LogError("Error adding subtype: %v %v r: %+v", err, record, *assignCPGType)
 			}
 		} else {
 			this.LogError("Record is nil: %s %s", destObj.String()[:lastSep], recordName)
@@ -1701,7 +1705,7 @@ func (this *GoLanguageFrontend) handleIdent(fset *token.FileSet, ident *ast.Iden
 
 	// Check, if this is 'nil', because then we handle it as a literal in the graph
 	if ident.Name == "nil" {
-		lit := this.NewLiteral(fset, ident, nil, &cpg.UnknownType_getUnknown(lang).Type)
+		lit := this.NewLiteral(fset, ident, nil, (*cpg.Type)(cpg.UnknownType_getUnknown(lang)))
 
 		(*cpg.Node)(lit).SetName(ident.Name)
 
@@ -1807,8 +1811,8 @@ func (this *GoLanguageFrontend) handleTypingType(ttype types.Type) *cpg.Type {
 		keyType := this.handleTypingType(v.Key())
 		valueType := this.handleTypingType(v.Elem())
 
-		(&(cpg.ObjectType{Type: *t})).AddGeneric(keyType)
-		(&(cpg.ObjectType{Type: *t})).AddGeneric(valueType)
+		(*cpg.ObjectType)(t).AddGeneric(keyType)
+		(*cpg.ObjectType)(t).AddGeneric(valueType)
 
 		return t
 	case *types.Chan:
@@ -1816,7 +1820,7 @@ func (this *GoLanguageFrontend) handleTypingType(ttype types.Type) *cpg.Type {
 		t := cpg.TypeParser_createFrom("chan", lang)
 		chanType := this.handleTypingType(v.Elem())
 
-		(&(cpg.ObjectType{Type: *t})).AddGeneric(chanType)
+		(*cpg.ObjectType)(t).AddGeneric(chanType)
 
 		return t
 	case *types.Basic:
@@ -1862,12 +1866,12 @@ func (this *GoLanguageFrontend) handleTypingType(ttype types.Type) *cpg.Type {
 			log.Fatal(err)
 		}
 
-		return &cpg.Type{ObjectRef: t}
+		return (*cpg.Type)(t)
 	default:
 		this.LogInfo("Can't parse %T", v)
 	}
 
-	return &cpg.UnknownType_getUnknown(lang).Type
+	return (*cpg.Type)(cpg.UnknownType_getUnknown(lang))
 }
 
 func (this *GoLanguageFrontend) handleType(typeExpr ast.Expr) *cpg.Type {
@@ -1922,8 +1926,8 @@ func (this *GoLanguageFrontend) handleType(typeExpr ast.Expr) *cpg.Type {
 		valueType := this.handleType(v.Value)
 
 		// TODO(oxisto): Find a better way to represent casts
-		(&(cpg.ObjectType{Type: *t})).AddGeneric(keyType)
-		(&(cpg.ObjectType{Type: *t})).AddGeneric(valueType)
+		(*cpg.ObjectType)(t).AddGeneric(keyType)
+		(*cpg.ObjectType)(t).AddGeneric(valueType)
 
 		return t
 	case *ast.ChanType:
@@ -1931,7 +1935,7 @@ func (this *GoLanguageFrontend) handleType(typeExpr ast.Expr) *cpg.Type {
 		t := cpg.TypeParser_createFrom("chan", lang)
 		chanType := this.handleType(v.Value)
 
-		(&(cpg.ObjectType{Type: *t})).AddGeneric(chanType)
+		(*cpg.ObjectType)(t).AddGeneric(chanType)
 
 		return t
 	case *ast.InterfaceType:
@@ -1975,10 +1979,10 @@ func (this *GoLanguageFrontend) handleType(typeExpr ast.Expr) *cpg.Type {
 			log.Fatal(err)
 		}
 
-		return &cpg.Type{ObjectRef: t}
+		return (*cpg.Type)(t)
 	}
 
-	return &cpg.UnknownType_getUnknown(lang).Type
+	return (*cpg.Type)(cpg.UnknownType_getUnknown(lang))
 }
 
 func (this *GoLanguageFrontend) isBuiltinType(s string) bool {

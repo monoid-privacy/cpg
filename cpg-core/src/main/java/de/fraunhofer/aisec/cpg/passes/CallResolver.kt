@@ -288,6 +288,7 @@ open class CallResolver : SymbolResolverPass() {
             if (nameParts.isNotEmpty()) {
                 val records =
                     possibleContainingTypes.mapNotNull { recordMap[it.root.typeName] }.toSet()
+
                 invocationCandidates =
                     getInvocationCandidatesFromParents(nameParts[nameParts.size - 1], call, records)
                         .toMutableList()

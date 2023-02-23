@@ -192,13 +192,13 @@ func (r *RecordDeclaration) AddMethod(m *MethodDeclaration) (err error) {
 }
 
 func (r *RecordDeclaration) AddSuperClass(t *Type) (err error) {
-	(*jnigi.ObjectRef)(r).CallMethod(env, "addSuperClass", nil, t)
+	(*jnigi.ObjectRef)(r).CallMethod(env, "addSuperClass", nil, (*jnigi.ObjectRef)(t).Cast(TypeClass))
 
 	return
 }
 
 func (r *RecordDeclaration) AddExternalSubType(t *Type) (err error) {
-	return (*jnigi.ObjectRef)(r).CallMethod(env, "addExternalSubType", nil, t)
+	return (*jnigi.ObjectRef)(r).CallMethod(env, "addExternalSubType", nil, (*jnigi.ObjectRef)(t).Cast(TypeClass))
 }
 
 func (r *RecordDeclaration) AddField(f *FieldDeclaration) {

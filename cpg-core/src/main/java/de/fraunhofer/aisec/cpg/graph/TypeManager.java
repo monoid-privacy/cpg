@@ -80,7 +80,8 @@ public class TypeManager {
 
   @NotNull
   private final Map<Type, List<Type>> typeState =
-      Collections.synchronizedMap(new HashMap<>()); // Stores all the unique types ObjectType as
+      Collections.synchronizedMap(new HashMap<>()); // Stores all the unique
+  // types ObjectType as
   // Key and
   // Reference-/PointerTypes
   // as Values
@@ -172,7 +173,8 @@ public class TypeManager {
     if (scope instanceof TemplateScope) {
       var node = scope.getAstNode();
 
-      // We need an additional check here, because of parsing or other errors, the AST node might
+      // We need an additional check here, because of parsing or other errors, the AST
+      // node might
       // not necessarily be a template declaration.
       if (node instanceof TemplateDeclaration) {
         TemplateDeclaration template = (TemplateDeclaration) node;
@@ -341,7 +343,8 @@ public class TypeManager {
   }
 
   private Set<Type> unwrapTypes(Collection<Type> types, WrapState wrapState) {
-    // TODO Performance: This method is called very often (for each setType()) and does four
+    // TODO Performance: This method is called very often (for each setType()) and
+    // does four
     // iterations over "types". Reduce number of iterations.
     Set<Type> original = new HashSet<>(types);
     Set<Type> unwrappedTypes = new HashSet<>();
@@ -469,10 +472,18 @@ public class TypeManager {
 
     List<Set<Ancestor>> allAncestors =
         types.stream()
-            .map(t -> typeToRecord.getOrDefault(t.getTypeName(), null))
+            .map(
+                t -> {
+                  RecordDeclaration res = typeToRecord.getOrDefault(t.getTypeName(), null);
+                  return res;
+                })
             .filter(Objects::nonNull)
             .map(r -> getAncestors(r, 0))
             .collect(Collectors.toList());
+
+    if (allAncestors.size() != types.size()) {
+      return Optional.empty();
+    }
 
     // normalize/reverse depth: roots start at 0, increasing on each level
     for (Set<Ancestor> ancestors : allAncestors) {
@@ -491,7 +502,8 @@ public class TypeManager {
       } else {
         Set<Ancestor> others = allAncestors.get(i);
         Set<Ancestor> newCommonAncestors = new HashSet<>();
-        // like Collection#retainAll but swaps relevant items out if the other set's matching
+        // like Collection#retainAll but swaps relevant items out if the other set's
+        // matching
         // ancestor has a higher depth
         for (Ancestor curr : commonAncestors) {
           Optional<Ancestor> toRetain =
@@ -559,10 +571,12 @@ public class TypeManager {
     }
 
     Optional<Type> commonType = getCommonType(new HashSet<>(List.of(superType, subType)), provider);
+
     if (commonType.isPresent()) {
       return commonType.get().equals(superType);
     } else {
-      // If array depth matches: check whether these are types from the standard library
+      // If array depth matches: check whether these are types from the standard
+      // library
       try {
         Class<?> superCls = Class.forName(superType.getTypeName());
         Class<?> subCls = Class.forName(subType.getTypeName());
