@@ -101,9 +101,7 @@ class FunctionPointerCallResolver : Pass() {
                 }
                 ?.firstOrNull()
         if (pointer != null) {
-            log.error("Handling fp call")
             handleFunctionPointerCall(call, pointer)
-            log.error("Handled fp call")
         }
     }
 

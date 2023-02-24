@@ -304,7 +304,6 @@ public class DeclarationHandler
         de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration fdecl =
             (de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration)
                 handle(decl); // will be added via the scopemanager
-        recordDeclaration.addField(fdecl);
       } else if (decl instanceof com.github.javaparser.ast.body.MethodDeclaration) {
         de.fraunhofer.aisec.cpg.graph.declarations.MethodDeclaration md =
             (de.fraunhofer.aisec.cpg.graph.declarations.MethodDeclaration) handle(decl);

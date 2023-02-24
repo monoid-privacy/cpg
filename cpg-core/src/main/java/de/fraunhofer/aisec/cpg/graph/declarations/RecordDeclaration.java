@@ -233,7 +233,7 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   public void addMethod(MethodDeclaration methodDeclaration) {
     if (this.methodMap.containsKey(methodDeclaration.getName())) {
       for (Integer ix : this.methodMap.get(methodDeclaration.getName())) {
-        if (this.methods.get(ix).equals(methodDeclaration)) {
+        if (this.methods.get(ix).getEnd().equals(methodDeclaration)) {
           return;
         }
       }
@@ -497,9 +497,9 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
     if (declaration instanceof ConstructorDeclaration) {
       addIfNotContains(this.constructors, (ConstructorDeclaration) declaration);
     } else if (declaration instanceof MethodDeclaration) {
-      addIfNotContains(this.methods, (MethodDeclaration) declaration);
+      addMethod((MethodDeclaration) declaration);
     } else if (declaration instanceof FieldDeclaration) {
-      addIfNotContains(this.fields, (FieldDeclaration) declaration);
+      addField((FieldDeclaration) declaration);
     } else if (declaration instanceof RecordDeclaration) {
       addIfNotContains(this.records, (RecordDeclaration) declaration);
     } else if (declaration instanceof TemplateDeclaration) {

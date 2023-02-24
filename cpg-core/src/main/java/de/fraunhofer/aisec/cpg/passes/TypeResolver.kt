@@ -40,7 +40,7 @@ open class TypeResolver : Pass() {
     protected val firstOrderTypes = mutableMapOf<Type, Type>()
     protected val typeState = mutableMapOf<Type, MutableList<Type>>()
     protected val typeStateKeyMap = mutableMapOf<Type, Type>()
-    protected val typeStateNameMap = hashMapOf<String, Type>()
+    protected val typeStateNameMap = hashMapOf<String, MutableList<Type>>()
 
     /**
      * Reduce the SecondOrderTypes to store only the unique SecondOrderTypes
@@ -92,7 +92,12 @@ open class TypeResolver : Pass() {
             // This is a rootType and is included in the map as key with empty references
             typeState[type] = mutableListOf()
             typeStateKeyMap[type] = type
-            typeStateNameMap[type.typeName] = type
+
+            if (type.typeName !in typeStateNameMap) {
+                typeStateNameMap[type.typeName] = mutableListOf<Type>()
+            }
+
+            typeStateNameMap[type.typeName]!!.add(type)
             return
         }
 
@@ -122,10 +127,15 @@ open class TypeResolver : Pass() {
         }
 
         // Build Map from firstOrderTypes to list of secondOderTypes
-        for ((t, _) in firstOrderTypes) {
+        for ((_, t) in firstOrderTypes) {
             typeState[t] = mutableListOf()
             typeStateKeyMap[t] = t
-            typeStateNameMap[t.typeName] = t
+
+            if (t.typeName !in typeStateNameMap) {
+                typeStateNameMap[t.typeName] = mutableListOf<Type>()
+            }
+
+            typeStateNameMap[t.typeName]!!.add(t)
         }
 
         // Remove duplicate secondOrderTypes
@@ -190,10 +200,15 @@ open class TypeResolver : Pass() {
         // globally unique
         if (node is HasType && node.type !is ParameterizedType) {
             val type = node.type
+
             val types =
                 if (type.isFirstOrderType) {
                     typeStateKeyMap
                 } else {
+                    if (type.root !in typeState) {
+                        typeState[type.root] = mutableListOf<Type>(type.root)
+                    }
+
                     typeState[type.root]?.map { it to it }?.toMap() ?: typeStateKeyMap
                 }
 
@@ -235,9 +250,12 @@ open class TypeResolver : Pass() {
      */
     fun handle(node: Node) {
         if (node is RecordDeclaration) {
-            val r = typeStateNameMap[node.name]
-            if (r is ObjectType) {
-                r.recordDeclaration = node
+            val rtypes = typeStateNameMap[node.name] ?: emptyList()
+
+            for (t in rtypes) {
+                if (t is ObjectType) {
+                    t.recordDeclaration = node
+                }
             }
         }
     }

@@ -164,7 +164,10 @@ private constructor(
                                 999,
                                 { p: Path?, fileAttr: BasicFileAttributes ->
                                     fileAttr.isRegularFile &&
-                                        !(p?.any { it.toString().contains("test") } ?: false)
+                                        !(p != null &&
+                                            file.toPath().relativize(p).any {
+                                                it.toString().contains("test")
+                                            })
                                 }
                             )
                             .map { it.toFile() }

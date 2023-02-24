@@ -32,6 +32,7 @@ import de.fraunhofer.aisec.cpg.graph.declarations.RecordDeclaration;
 import de.fraunhofer.aisec.cpg.graph.edge.Properties;
 import de.fraunhofer.aisec.cpg.graph.edge.PropertyEdge;
 import java.util.*;
+import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.neo4j.ogm.annotation.Relationship;
 
 /**
@@ -206,6 +207,14 @@ public class ObjectType extends Type implements HasType.SecondaryTypeEdge {
         && PropertyEdge.propertyEqualsList(generics, that.generics)
         && this.primitive == that.primitive
         && this.modifier.equals(that.modifier);
+  }
+
+  @Override
+  public String toString() {
+    return new ToStringBuilder(this, TO_STRING_STYLE)
+        .append("name", getName())
+        .append("generics", this.getGenerics())
+        .toString();
   }
 
   @Override

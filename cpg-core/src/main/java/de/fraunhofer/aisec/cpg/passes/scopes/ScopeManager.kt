@@ -682,7 +682,7 @@ class ScopeManager : ScopeProvider {
             // TODO: proper scope selection
 
             // this is a scoped call. we need to explicitly jump to that particular scope
-            var scope: Scope? = lookupScope(scopeName)
+            scope = lookupScope(scopeName)
             if (scope == null) {
                 LOGGER.warn(
                     "Could not find the scope {} needed to resolve the call {}. Falling back to the current scope",

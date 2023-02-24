@@ -143,7 +143,6 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 	goFrontend.LogInfo("Data: %v", data)
 
 	if data == nil {
-		goFrontend.LogError("Initializing")
 		fset := token.NewFileSet()
 		fileMap := map[string]PackageFile{}
 
@@ -198,7 +197,6 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 			packageArr = append(packageArr, p)
 		}
 
-		goFrontend.LogError("LOad Packages")
 		parsedPkgs, err := packages.Load(&packages.Config{
 			Fset: fset,
 			Dir:  rootPath,
@@ -208,7 +206,6 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 		if err != nil {
 			log.Fatal(err)
 		}
-		goFrontend.LogError("End Load Packages")
 
 		goFrontend.LogInfo("Files: %+v %s", parsedPkgs, topLevel)
 
@@ -238,7 +235,6 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 					}
 				}
 
-				goFrontend.LogError("File: %s %v", fpath, p)
 				tu, err := goFrontend.HandleFileRecordDeclarations(fset, f, fpath)
 				if err != nil {
 					log.Fatal(err)
@@ -264,8 +260,6 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 			fileMap: fileMap,
 			pkgs:    parsedPkgs,
 		}
-
-		goFrontend.LogError("Done Initializing")
 	}
 
 	goFrontend.CommentMap = nil
@@ -328,8 +322,6 @@ func Java_de_fraunhofer_aisec_cpg_frontends_golang_GoLanguageFrontend_parseInter
 		goFrontend.CommentMap = ast.NewCommentMap(data.fset, file, file.Comments)
 		goFrontend.File = file
 	}
-
-	goFrontend.LogError("Path: %s, top: %s, tu: %v", path, topLevel, tu)
 
 	err = goFrontend.HandleFileContent(data.fset, file, tu)
 	if err != nil {

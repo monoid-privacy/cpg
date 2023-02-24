@@ -104,6 +104,18 @@ func (g *GoLanguageFrontend) LogDebug(format string, args ...interface{}) (err e
 	return
 }
 
+func (g *GoLanguageFrontend) LogWarn(format string, args ...interface{}) (err error) {
+	var logger *jnigi.ObjectRef
+
+	if logger, err = g.getLog(); err != nil {
+		return
+	}
+
+	err = logger.CallMethod(env, "warn", nil, cpg.NewString(fmt.Sprintf(format, args...)))
+
+	return
+}
+
 func (g *GoLanguageFrontend) LogError(format string, args ...interface{}) (err error) {
 	var logger *jnigi.ObjectRef
 

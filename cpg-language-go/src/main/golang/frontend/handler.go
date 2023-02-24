@@ -616,8 +616,6 @@ func (this *GoLanguageFrontend) handleStructTypeSpec(fset *token.FileSet, typeDe
 			f.SetType(t)
 			f.SetIsEmbeddedField(embedded)
 
-			r.AddField(f)
-
 			scope.AddDeclaration((*cpg.Declaration)(f))
 		}
 	}
@@ -985,7 +983,7 @@ func (this *GoLanguageFrontend) handleExpr(fset *token.FileSet, expr ast.Expr) (
 	case *ast.FuncLit:
 		e = (*cpg.Expression)(this.handleFuncLit(fset, v))
 	default:
-		this.LogError("Could not parse expression of type %T: %+v", v, v)
+		this.LogWarn("Could not parse expression of type %T: %+v", v, v)
 		// TODO: return an error instead?
 		e = nil
 	}
