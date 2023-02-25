@@ -77,7 +77,7 @@ class LambdaExpression : Expression(), HasType.TypeListener {
                 Type.Qualifier(false, false, false, false),
                 Type.Storage.AUTO,
                 parameterTypes,
-                returnType,
+                listOf(returnType),
                 this.language
             )
 

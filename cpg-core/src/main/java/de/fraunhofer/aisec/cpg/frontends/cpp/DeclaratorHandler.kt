@@ -250,9 +250,10 @@ class DeclaratorHandler(lang: CXXLanguageFrontend) :
             // AST field, (for now) we only want those methods in  there, that were actual AST
             // parents. This is also something that we need to figure out how we want to handle
             // this.
-            (frontend.scopeManager.currentScope as? RecordScope)
-                ?.valueDeclarations
-                ?.add(declaration)
+            (frontend.scopeManager.currentScope as? RecordScope)?.addValueDeclaration(
+                declaration,
+                false
+            )
         } else {
             // Add the declaration via the scope manager
             frontend.scopeManager.addDeclaration(declaration)

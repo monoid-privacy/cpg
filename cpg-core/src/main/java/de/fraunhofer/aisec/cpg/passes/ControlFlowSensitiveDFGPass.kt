@@ -194,6 +194,16 @@ open class ControlFlowSensitiveDFGPass : Pass() {
                 previousWrites[currentNode.refersTo]?.lastOrNull()?.let {
                     currentNode.addPrevDFG(it)
                 }
+            } else if (currentNode is ForEachStatement) {
+                for (v in currentNode.getVariables()) {
+                    if (v is DeclarationStatement) {
+                        for (d in v.getDeclarations()) {
+                            d.addPrevDFG(currentNode.iterable)
+                        }
+                    } else {
+                        v.addPrevDFG(currentNode.iterable)
+                    }
+                }
             }
 
             // Check for loops: No loop statement with the same state as before and no write which

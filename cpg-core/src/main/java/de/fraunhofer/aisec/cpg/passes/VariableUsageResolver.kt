@@ -28,12 +28,17 @@ package de.fraunhofer.aisec.cpg.passes
 import de.fraunhofer.aisec.cpg.TranslationResult
 import de.fraunhofer.aisec.cpg.frontends.HasStructs
 import de.fraunhofer.aisec.cpg.frontends.HasSuperClasses
+import de.fraunhofer.aisec.cpg.graph.HasType
 import de.fraunhofer.aisec.cpg.graph.Node
 import de.fraunhofer.aisec.cpg.graph.declarations.*
 import de.fraunhofer.aisec.cpg.graph.functions
 import de.fraunhofer.aisec.cpg.graph.newFieldDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.DeclaredReferenceExpression
+import de.fraunhofer.aisec.cpg.graph.statements.expressions.Expression
+import de.fraunhofer.aisec.cpg.graph.statements.expressions.InitializerListExpression
+import de.fraunhofer.aisec.cpg.graph.statements.expressions.KeyValueExpression
+import de.fraunhofer.aisec.cpg.graph.statements.expressions.Literal
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.MemberCallExpression
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.MemberExpression
 import de.fraunhofer.aisec.cpg.graph.types.*
@@ -62,6 +67,9 @@ import org.slf4j.LoggerFactory
  */
 @DependsOn(TypeHierarchyResolver::class)
 open class VariableUsageResolver : SymbolResolverPass() {
+    protected var unknownParents =
+        mutableMapOf<Expression, MutableList<Pair<RecordDeclaration?, Node>>>()
+    private val subtypes = mutableMapOf<String, MutableSet<Type>>()
 
     override fun accept(result: TranslationResult) {
         scopeManager = result.scopeManager
@@ -84,10 +92,71 @@ open class VariableUsageResolver : SymbolResolverPass() {
             walker.registerHandler { curClass, _, node -> resolveFieldUsages(curClass, node) }
             walker.iterate(tu)
         }
+
         for (tu in result.translationUnits) {
             walker.clearCallbacks()
             walker.registerHandler(::resolveLocalVarUsage)
             walker.iterate(tu)
+        }
+
+        for (tu in result.translationUnits) {
+            walker.clearCallbacks()
+            walker.registerHandler { curClass, _, node -> resolveUnknowns(curClass, node) }
+            walker.iterate(tu)
+        }
+
+        for (tu in result.translationUnits) {
+            walker.clearCallbacks()
+            walker.registerHandler { _, _, node -> resolveInitializerListExpression(node) }
+            walker.iterate(tu)
+        }
+
+        for ((_, record) in recordMap) {
+            for (iface in record.getImplementedInterfaces()) {
+                if (iface.typeName !in subtypes) {
+                    subtypes[iface.typeName] = mutableSetOf<Type>()
+                }
+
+                subtypes[iface.typeName]!!.add(record.toType())
+            }
+
+            for (ext in record.getExternalSubTypes()) {
+                val typ = record.toType()
+
+                if (typ.typeName !in subtypes) {
+                    subtypes[typ.typeName] = mutableSetOf<Type>()
+                }
+
+                subtypes[typ.typeName]!!.add(ext)
+            }
+        }
+
+        for (tu in result.translationUnits) {
+            walker.clearCallbacks()
+            walker.registerHandler { _, _, node -> updateImplementedInterfaces(node) }
+            walker.iterate(tu)
+        }
+    }
+
+    private fun resolveInitializerListExpression(current: Node) {
+        if (current !is InitializerListExpression) return
+        if (current.type.typeName !in recordMap) return
+
+        val record = recordMap[current.type.typeName]
+
+        for (fieldInit in current.getInitializers()) {
+            if (fieldInit !is KeyValueExpression) continue
+
+            val k = fieldInit.key
+
+            if (k !is Literal<*> || k.value !is String) continue
+
+            val member =
+                record!!.fieldsWithName(k.value as String).map { it.definition }.firstOrNull()
+
+            if (member == null) continue
+
+            member.addPrevDFG(fieldInit)
         }
     }
 
@@ -151,7 +220,11 @@ open class VariableUsageResolver : SymbolResolverPass() {
         }
 
         // only consider resolving, if the language frontend did not specify a resolution
-        var refersTo = current.refersTo ?: scopeManager.resolveReference(current)
+        var refersTo: Declaration? = current.refersTo
+        if (refersTo == null) {
+            refersTo = scopeManager.resolveReference(current)
+        }
+
         // if (current.refersTo == null) scopeManager?.resolveReference(current)
         // else current.refersTo!!
         var recordDeclType: Type? = null
@@ -226,8 +299,54 @@ open class VariableUsageResolver : SymbolResolverPass() {
         }
     }
 
-    private fun resolveFieldUsages(curClass: RecordDeclaration?, current: Node) {
+    private fun updateImplementedInterfaces(
+        current: Node,
+    ) {
+        if (current !is HasType) return
+        val type = current.getType()
+        if (type.typeName !in subtypes) return
+
+        val updateList = subtypes[type.typeName]!!.toList() + current.getPossibleSubTypes()
+
+        current.setPossibleSubTypes(updateList)
+    }
+
+    private fun resolveUnknowns(curClass: RecordDeclaration?, current: Node) {
+        if (current !is Expression) return
+        if (current !in unknownParents) return
+        if (current.type is UnknownType) {
+            return
+        }
+
+        val worklist = mutableListOf<Pair<RecordDeclaration?, Node>>()
+
+        for (p in unknownParents[current]!!) {
+            worklist.add(p)
+        }
+
+        while (worklist.size > 0) {
+            val pair = worklist.removeLast()
+            val (childCls, childNode) = pair
+
+            resolveFieldUsages(childCls, childNode, false)
+
+            if (childNode !in unknownParents) continue
+            for (p in unknownParents[childNode]!!) {
+                worklist.add(p)
+            }
+        }
+
+        unknownParents.remove(current)
+    }
+
+    private fun resolveFieldUsages(
+        curClass: RecordDeclaration?,
+        current: Node,
+        saveUnknowns: Boolean = true
+    ) {
         if (current !is MemberExpression) return
+
+        // log.error("Resolve field usage: " + " " + curClass + " " + current)
 
         var baseTarget: Declaration? = null
         if (current.base is DeclaredReferenceExpression) {
@@ -294,6 +413,15 @@ open class VariableUsageResolver : SymbolResolverPass() {
                 return
             }
         }
+
+        if (current.base.type is UnknownType && saveUnknowns) {
+            if (current.base !in unknownParents) {
+                unknownParents[current.base] = mutableListOf<Pair<RecordDeclaration?, Node>>()
+            }
+
+            unknownParents[current.base]!!.add(Pair(curClass, current))
+        }
+
         var baseType = current.base.type
         if (baseType.typeName !in recordMap) {
             val fqnResolvedType = recordMap.keys.firstOrNull { it.endsWith("." + baseType.name) }
@@ -301,6 +429,7 @@ open class VariableUsageResolver : SymbolResolverPass() {
                 baseType = TypeParser.createFrom(fqnResolvedType, baseType.language)
             }
         }
+
         current.refersTo = resolveMember(baseType, current)
     }
 
@@ -330,32 +459,33 @@ open class VariableUsageResolver : SymbolResolverPass() {
             return null
         }
         val simpleName = Util.getSimpleName(reference.language, reference.name)
+
         var member: FieldDeclaration? = null
         if (containingClass !is UnknownType && containingClass.typeName in recordMap) {
             member =
                 recordMap[containingClass.typeName]!!
-                    .fields
-                    .filter { it.name == simpleName }
+                    .fieldsWithName(simpleName)
                     .map { it.definition }
                     .firstOrNull()
         }
+
         if (member == null) {
             member =
                 superTypesMap
                     .getOrDefault(containingClass.typeName, listOf())
                     .mapNotNull { recordMap[it.typeName] }
-                    .flatMap { it.fields }
-                    .filter { it.name == simpleName }
+                    .flatMap { it.fieldsWithName(simpleName) }
                     .map { it.definition }
                     .firstOrNull()
         }
+
         // Attention: using orElse instead of orElseGet will always invoke unknown declaration
         // handling!
         return member ?: handleUnknownField(containingClass, reference.name, reference.type)
     }
 
     // TODO(oxisto): Move to inference class
-    private fun handleUnknownField(base: Type, name: String, type: Type): FieldDeclaration? {
+    private fun handleUnknownField(base: Type, name: String, type: Type): ValueDeclaration? {
         // unwrap a potential pointer-type
         if (base is PointerType) {
             return handleUnknownField(base.elementType, name, type)
@@ -385,25 +515,47 @@ open class VariableUsageResolver : SymbolResolverPass() {
             return null
         }
 
-        val target = recordDeclaration.fields.firstOrNull { it.name == name }
-
-        return if (target != null) {
-            target
-        } else {
-            val declaration =
-                recordDeclaration.newFieldDeclaration(
-                    name,
-                    type,
-                    listOf<String>(),
-                    "",
-                    null,
-                    null,
-                    false,
-                )
-            recordDeclaration.addField(declaration)
-            declaration.isInferred = true
-            declaration
+        var target: ValueDeclaration? = recordDeclaration.fieldsWithName(name).firstOrNull()
+        if (target != null) {
+            return target
         }
+
+        target = recordDeclaration.methods.firstOrNull { it.name == name }
+        if (target != null) {
+            return target
+        }
+
+        // Handle embedded fields
+        target =
+            recordDeclaration.fields
+                .filter { it.isEmbeddedField() }
+                .mapNotNull {
+                    recordMap[
+                        if (it.type is PointerType) (it.type as PointerType).elementType.typeName
+                        else it.type.typeName
+                    ]
+                }
+                .flatMap { it.fieldsWithName(name) }
+                .map { it.definition }
+                .firstOrNull()
+
+        if (target != null) {
+            return target
+        }
+
+        val declaration =
+            recordDeclaration.newFieldDeclaration(
+                name,
+                type,
+                listOf<String>(),
+                "",
+                null,
+                null,
+                false,
+            )
+        recordDeclaration.addField(declaration)
+        declaration.isInferred = true
+        return declaration
     }
 
     /**
@@ -421,11 +573,11 @@ open class VariableUsageResolver : SymbolResolverPass() {
         val target =
             if (declarationHolder != null) {
                 declarationHolder.methods.firstOrNull { f ->
-                    f.matches(name, fctPtrType.returnType, fctPtrType.parameters)
+                    f.matches(name, fctPtrType.returnTypes, fctPtrType.parameters)
                 }
             } else {
                 currentTU.functions.firstOrNull { f ->
-                    f.matches(name, fctPtrType.returnType, fctPtrType.parameters)
+                    f.matches(name, fctPtrType.returnTypes, fctPtrType.parameters)
                 }
             }
         // If we didn't find anything, we create a new function or method declaration
@@ -437,7 +589,7 @@ open class VariableUsageResolver : SymbolResolverPass() {
                     null,
                     false,
                     fctPtrType.parameters,
-                    fctPtrType.returnType
+                    fctPtrType.returnTypes
                 )
     }
 

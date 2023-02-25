@@ -72,7 +72,7 @@ internal class TypeTests : BaseTest() {
                 Type.Qualifier(),
                 Type.Storage.AUTO,
                 parameterList,
-                IncompleteType(),
+                listOf<Type>(IncompleteType()),
                 CPPLanguage()
             )
 
@@ -136,7 +136,7 @@ internal class TypeTests : BaseTest() {
                 Type.Qualifier(),
                 Type.Storage.AUTO,
                 parameterList,
-                IncompleteType(),
+                listOf<Type>(IncompleteType()),
                 CPPLanguage()
             )
 
@@ -387,7 +387,7 @@ internal class TypeTests : BaseTest() {
                 Type.Qualifier(),
                 Type.Storage.AUTO,
                 parameterList,
-                IncompleteType(),
+                listOf<Type>(IncompleteType()),
                 CPPLanguage()
             )
         assertEquals(expected, result)
@@ -855,7 +855,7 @@ internal class TypeTests : BaseTest() {
                 Type.Qualifier(),
                 Type.Storage.AUTO,
                 emptyList(),
-                IncompleteType(),
+                listOf<Type>(IncompleteType()),
                 CPPLanguage()
             )
         val oneParamType =
@@ -873,7 +873,7 @@ internal class TypeTests : BaseTest() {
                         CPPLanguage()
                     )
                 ),
-                IncompleteType(),
+                listOf<Type>(IncompleteType()),
                 CPPLanguage()
             )
         val twoParamType =
@@ -900,14 +900,16 @@ internal class TypeTests : BaseTest() {
                         CPPLanguage()
                     )
                 ),
-                ObjectType(
-                    "int",
-                    Type.Storage.AUTO,
-                    Type.Qualifier(),
-                    ArrayList(),
-                    ObjectType.Modifier.SIGNED,
-                    true,
-                    CPPLanguage()
+                listOf<Type>(
+                    ObjectType(
+                        "int",
+                        Type.Storage.AUTO,
+                        Type.Qualifier(),
+                        ArrayList(),
+                        ObjectType.Modifier.SIGNED,
+                        true,
+                        CPPLanguage()
+                    )
                 ),
                 CPPLanguage()
             )

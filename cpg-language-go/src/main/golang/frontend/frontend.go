@@ -35,6 +35,7 @@ import (
 	"log"
 
 	"golang.org/x/mod/modfile"
+	"golang.org/x/tools/go/packages"
 	"tekao.net/jnigi"
 )
 
@@ -42,9 +43,11 @@ var env *jnigi.Env
 
 type GoLanguageFrontend struct {
 	*jnigi.ObjectRef
-	File       *ast.File
-	Module     *modfile.File
-	CommentMap ast.CommentMap
+	File             *ast.File
+	RelativeFilePath string
+	Module           *modfile.File
+	CommentMap       ast.CommentMap
+	Package          *packages.Package
 
 	CurrentTU *cpg.TranslationUnitDeclaration
 }
@@ -97,6 +100,18 @@ func (g *GoLanguageFrontend) LogDebug(format string, args ...interface{}) (err e
 	}
 
 	err = logger.CallMethod(env, "debug", nil, cpg.NewString(fmt.Sprintf(format, args...)))
+
+	return
+}
+
+func (g *GoLanguageFrontend) LogWarn(format string, args ...interface{}) (err error) {
+	var logger *jnigi.ObjectRef
+
+	if logger, err = g.getLog(); err != nil {
+		return
+	}
+
+	err = logger.CallMethod(env, "warn", nil, cpg.NewString(fmt.Sprintf(format, args...)))
 
 	return
 }

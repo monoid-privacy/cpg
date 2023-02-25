@@ -28,6 +28,7 @@ package de.fraunhofer.aisec.cpg.passes
 import de.fraunhofer.aisec.cpg.TranslationResult
 import de.fraunhofer.aisec.cpg.frontends.HasComplexCallResolution
 import de.fraunhofer.aisec.cpg.frontends.HasDefaultArguments
+import de.fraunhofer.aisec.cpg.frontends.HasNoClassScope
 import de.fraunhofer.aisec.cpg.frontends.HasTemplates
 import de.fraunhofer.aisec.cpg.frontends.cpp.CPPLanguage
 import de.fraunhofer.aisec.cpg.graph.HasType
@@ -79,6 +80,7 @@ open class CallResolver : SymbolResolverPass() {
 
     override fun accept(translationResult: TranslationResult) {
         scopeManager = translationResult.scopeManager
+
         config = translationResult.config
 
         walker = ScopedWalker(scopeManager)
@@ -160,7 +162,11 @@ open class CallResolver : SymbolResolverPass() {
                 // resolve this call's signature, we need to make sure any call expression arguments
                 // are fully resolved
                 resolveArguments(node)
-                handleCallExpression(scopeManager.currentRecord, node)
+                if (node.language is HasNoClassScope) {
+                    handleCallExpression(null, node)
+                } else {
+                    handleCallExpression(scopeManager.currentRecord, node)
+                }
             }
         }
     }
@@ -198,7 +204,8 @@ open class CallResolver : SymbolResolverPass() {
         // but it isn't
         val funcPointer =
             walker.getDeclarationForScope(call) { v ->
-                v.type is FunctionPointerType && v.name == call.name
+                (v.type is FunctionPointerType ||
+                    (v.type is FunctionType && v !is FunctionDeclaration)) && v.name == call.name
             }
         if (!funcPointer.isPresent) {
             // function pointers are handled by extra pass
@@ -209,8 +216,10 @@ open class CallResolver : SymbolResolverPass() {
     private fun resolveArguments(call: CallExpression) {
         val worklist: Deque<Node> = ArrayDeque()
         call.arguments.forEach { worklist.push(it) }
+
         while (!worklist.isEmpty()) {
             val curr = worklist.pop()
+
             if (curr is CallExpression) {
                 resolve(curr)
             } else {
@@ -279,11 +288,13 @@ open class CallResolver : SymbolResolverPass() {
             if (nameParts.isNotEmpty()) {
                 val records =
                     possibleContainingTypes.mapNotNull { recordMap[it.root.typeName] }.toSet()
+
                 invocationCandidates =
                     getInvocationCandidatesFromParents(nameParts[nameParts.size - 1], call, records)
                         .toMutableList()
             }
         }
+
         createMethodDummies(invocationCandidates, possibleContainingTypes, call)
         call.invokes = invocationCandidates
     }
@@ -454,7 +465,7 @@ open class CallResolver : SymbolResolverPass() {
                         "",
                         true,
                         call.signature,
-                        call.type // TODO: Is this correct?
+                        listOf(call.type) // TODO: Is this correct?
                     )
 
             invokes.add(inferred)
@@ -492,7 +503,8 @@ open class CallResolver : SymbolResolverPass() {
             (call.language as HasComplexCallResolution).refineInvocationCandidatesFromRecord(
                 recordDeclaration,
                 call,
-                namePattern
+                namePattern,
+                this
             )
         } else {
             recordDeclaration.methods.filter {
@@ -585,10 +597,24 @@ open class CallResolver : SymbolResolverPass() {
                 resolveConstructorWithImplicitCast(constructExpression, recordDeclaration)
         }
 
-        return constructorCandidate
-            ?: recordDeclaration
+        if (constructorCandidate != null) {
+            return constructorCandidate
+        }
+
+        val inf =
+            recordDeclaration
                 .startInference()
                 .createInferredConstructor(constructExpression.signature)
+
+        if (
+            inf.parameters.size == 1 &&
+                inf.returnTypes.size == 1 &&
+                (inf.parameters[0].type == inf.returnTypes[0])
+        ) {
+            inf.addPrevDFG(inf.parameters[0])
+        }
+
+        return inf
     }
 
     private fun getConstructorDeclarationForExplicitInvocation(

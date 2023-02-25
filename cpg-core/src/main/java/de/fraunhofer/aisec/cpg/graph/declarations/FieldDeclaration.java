@@ -62,6 +62,16 @@ public class FieldDeclaration extends ValueDeclaration implements TypeListener, 
    */
   private boolean implicitInitializerAllowed = false;
 
+  @Nullable private RecordDeclaration record;
+
+  public void setRecord(RecordDeclaration r) {
+    this.record = r;
+  }
+
+  public RecordDeclaration getRecord() {
+    return this.record;
+  }
+
   public boolean isImplicitInitializerAllowed() {
     return implicitInitializerAllowed;
   }
@@ -78,6 +88,16 @@ public class FieldDeclaration extends ValueDeclaration implements TypeListener, 
 
   public void setIsArray(boolean isArray) {
     this.isArray = isArray;
+  }
+
+  private boolean isEmbeddedField = false;
+
+  public boolean isEmbeddedField() {
+    return isEmbeddedField;
+  }
+
+  public void setIsEmbeddedField(Boolean isEmbeddedField) {
+    this.isEmbeddedField = isEmbeddedField;
   }
 
   private List<String> modifiers = new ArrayList<>();
@@ -141,9 +161,12 @@ public class FieldDeclaration extends ValueDeclaration implements TypeListener, 
     Type previous = this.type;
     Type newType;
     if (src == initializer && initializer instanceof InitializerListExpression) {
-      // Init list is seen as having an array type, but can be used ambiguously. It can be either
-      // used to initialize an array, or to initialize some objects. If it is used as an
-      // array initializer, we need to remove the array/pointer layer from the type, otherwise it
+      // Init list is seen as having an array type, but can be used ambiguously. It
+      // can be either
+      // used to initialize an array, or to initialize some objects. If it is used as
+      // an
+      // array initializer, we need to remove the array/pointer layer from the type,
+      // otherwise it
       // can be ignored once we have a type
       if (isArray) {
         newType = src.getType();

@@ -26,18 +26,15 @@
 package de.fraunhofer.aisec.cpg.frontends.golang
 
 import de.fraunhofer.aisec.cpg.TestUtils
-import de.fraunhofer.aisec.cpg.graph.bodyOrNull
-import de.fraunhofer.aisec.cpg.graph.byNameOrNull
-import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
-import de.fraunhofer.aisec.cpg.graph.declarations.NamespaceDeclaration
-import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration
-import de.fraunhofer.aisec.cpg.graph.statements.DeclarationStatement
-import de.fraunhofer.aisec.cpg.graph.statements.expressions.CastExpression
-import de.fraunhofer.aisec.cpg.graph.statements.expressions.DeclaredReferenceExpression
+import de.fraunhofer.aisec.cpg.graph.*
+import de.fraunhofer.aisec.cpg.graph.declarations.*
+import de.fraunhofer.aisec.cpg.graph.statements.*
+import de.fraunhofer.aisec.cpg.graph.statements.expressions.*
 import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 
 class ExpressionTest {
@@ -52,10 +49,10 @@ class ExpressionTest {
             ) { it.registerLanguage<GoLanguage>() }
         assertNotNull(tu)
 
-        val main = tu.byNameOrNull<NamespaceDeclaration>("main")
-        assertNotNull(main)
+        val main = tu.namespaces.filter { it.name == "p" }
+        assertTrue(main.size > 0)
 
-        val mainFunc = main.byNameOrNull<FunctionDeclaration>("main")
+        val mainFunc = (main.flatMap { it.functions })["main"]
         assertNotNull(mainFunc)
 
         val f =
@@ -70,7 +67,7 @@ class ExpressionTest {
 
         val cast = s.initializer as? CastExpression
         assertNotNull(cast)
-        assertEquals("main.MyStruct", cast.castType.name)
+        assertEquals("p.MyStructTA", cast.castType.name)
         assertSame(f, (cast.expression as? DeclaredReferenceExpression)?.refersTo)
     }
 }

@@ -27,7 +27,16 @@ package de.fraunhofer.aisec.cpg_vis_neo4j
 
 import de.fraunhofer.aisec.cpg.*
 import de.fraunhofer.aisec.cpg.frontends.CompilationDatabase.Companion.fromFile
-import de.fraunhofer.aisec.cpg.helpers.Benchmark
+import de.fraunhofer.aisec.cpg.frontends.golang.GoLanguage
+import de.fraunhofer.aisec.cpg.graph.*
+import de.fraunhofer.aisec.cpg.graph.AccessValues
+import de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration
+import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
+import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration
+import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
+import de.fraunhofer.aisec.cpg.passes.*
+import de.fraunhofer.aisec.cpg.query.QueryTree
+import de.fraunhofer.aisec.cpg.query.dataFlow
 import java.io.File
 import java.net.ConnectException
 import java.nio.file.Paths
@@ -58,6 +67,20 @@ private const val DEFAULT_PORT = 7687
 private const val DEFAULT_USER_NAME = "neo4j"
 private const val DEFAULT_PASSWORD = "password"
 private const val DEFAULT_SAVE_DEPTH = -1
+
+fun TranslationConfiguration.Builder.n4jpasses(): TranslationConfiguration.Builder {
+    registerPass(TypeHierarchyResolver())
+    registerPass(JavaExternalTypeHierarchyResolver())
+    registerPass(ImportResolver())
+    registerPass(VariableUsageResolver())
+    registerPass(CallResolver()) // creates CG
+    registerPass(DFGPass())
+    registerPass(FunctionPointerCallResolver())
+    registerPass(EvaluationOrderGraphPass()) // creates EOG
+    registerPass(TypeResolver())
+    registerPass(FilenameMapper())
+    return this
+}
 
 /**
  * An application to export the <a href="https://github.com/Fraunhofer-AISEC/cpg">cpg</a> to a <a
@@ -198,7 +221,7 @@ class Application : Callable<Int> {
      */
     @Throws(InterruptedException::class, ConnectException::class)
     fun pushToNeo4j(translationResult: TranslationResult) {
-        val bench = Benchmark(this.javaClass, "Push cpg to neo4j", false, translationResult)
+        // val bench = Benchmark(this.javaClass, "Push cpg to neo4j", false, translationResult)
         log.info("Using import depth: $depth")
         log.info(
             "Count base nodes to save: " +
@@ -218,7 +241,106 @@ class Application : Callable<Int> {
 
         session.clear()
         sessionAndSessionFactoryPair.second.close()
-        bench.addMeasurement()
+        // bench.addMeasurement()
+    }
+
+    fun callPath(from: FunctionDeclaration, to: FunctionDeclaration): Boolean {
+        val worklist = mutableListOf<FunctionDeclaration>(from)
+        val seen = mutableSetOf<FunctionDeclaration>()
+
+        while (!worklist.isEmpty()) {
+            val f = worklist.removeLast()
+
+            if (f in seen) continue
+            seen.add(f)
+
+            if (f == to) {
+                return true
+            }
+
+            for (c in f.callees) {
+                worklist.add(c)
+            }
+        }
+
+        return false
+    }
+
+    fun executionPath(from: Node, to: Node): QueryTree<Boolean> {
+        var pred: (Node) -> Boolean = { n -> n == to }
+
+        if (
+            from.containingFunction != to.containingFunction &&
+                to.containingFunction != null &&
+                from.containingFunction != null
+        ) {
+            pred = { n ->
+                if (n is CallExpression) {
+                    n.invokes.any({ fn -> callPath(fn, to.containingFunction!!) })
+                } else {
+                    n == to
+                }
+            }
+        }
+
+        val evalRes = from.followNextEOGEdgesUntilHit(pred)
+        val allPaths = evalRes.fulfilled.map { QueryTree(it) }.toMutableList()
+
+        return QueryTree(
+            evalRes.fulfilled.isNotEmpty(),
+            allPaths.toMutableList(),
+            "executionPath($from, $to)"
+        )
+    }
+
+    fun getSourceNodes(translationResult: TranslationResult): List<Node> {
+        var res = listOf<Node>()
+
+        val filtFields =
+            translationResult.components[0].fields.filter { n: FieldDeclaration ->
+                n.name.lowercase().contains("email")
+            }
+
+        res = res + filtFields.flatMap { it.getUsages() }.filter { it.access == AccessValues.READ }
+
+        for (f in filtFields) {
+            log.info("F: " + f + " " + f.record)
+
+            res =
+                res +
+                    translationResult.allChildren<VariableDeclaration>({ v ->
+                        v.type == f.record.toType()
+                    })
+        }
+
+        return res
+    }
+
+    fun runAnalysis(translationResult: TranslationResult) {
+        var externCalls =
+            translationResult.components[0].calls.filter { c: CallExpression ->
+                c.invokes.size == 0 ||
+                    c.invokes[0].isInferred // && (c.fqn?.startsWith("gorm") ?: false)
+            }
+
+        for (v in getSourceNodes(translationResult)) {
+            log.info("Usage: " + v)
+
+            for (ecall in externCalls) {
+                val qt = dataFlow(v, ecall)
+                if (qt.value) {
+                    log.info("DFG Matched: " + ecall.code)
+
+                    if (executionPath(v, ecall).value) {
+                        log.info("Call: " + ecall.code + " " + qt.value)
+
+                        for (n in (qt.children[0].value as List<Node>)) {
+                            log.info("Node: " + n)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -296,7 +418,7 @@ class Application : Callable<Int> {
             TranslationConfiguration.builder()
                 .topLevel(topLevel)
                 .defaultLanguages()
-                .optionalLanguage("de.fraunhofer.aisec.cpg.frontends.golang.GoLanguage")
+                .registerLanguage(GoLanguage())
                 .optionalLanguage("de.fraunhofer.aisec.cpg.frontends.llvm.LLVMIRLanguage")
                 .optionalLanguage("de.fraunhofer.aisec.cpg.frontends.python.PythonLanguage")
                 .optionalLanguage("de.fraunhofer.aisec.cpg.frontends.typescript.TypeScriptLanguage")
@@ -315,7 +437,7 @@ class Application : Callable<Int> {
         }
 
         if (!noDefaultPasses) {
-            translationConfiguration.defaultPasses()
+            translationConfiguration.n4jpasses()
         }
 
         if (mutuallyExclusiveParameters.jsonCompilationDatabase != null) {
@@ -373,6 +495,8 @@ class Application : Callable<Int> {
         if (!noNeo4j) {
             pushToNeo4j(translationResult)
         }
+
+        runAnalysis(translationResult)
 
         val pushTime = System.currentTimeMillis()
         log.info("Benchmark: push code in " + (pushTime - analyzingTime) / S_TO_MS_FACTOR + " s.")

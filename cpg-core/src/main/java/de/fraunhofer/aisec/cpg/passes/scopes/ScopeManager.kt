@@ -32,7 +32,6 @@ import de.fraunhofer.aisec.cpg.graph.statements.*
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.DeclaredReferenceExpression
 import de.fraunhofer.aisec.cpg.graph.types.FunctionPointerType
-import de.fraunhofer.aisec.cpg.graph.types.IncompleteType
 import de.fraunhofer.aisec.cpg.graph.types.Type
 import de.fraunhofer.aisec.cpg.helpers.Util
 import de.fraunhofer.aisec.cpg.processing.IVisitor
@@ -65,7 +64,7 @@ class ScopeManager : ScopeProvider {
     private val scopeMap: MutableMap<Node?, Scope> = IdentityHashMap()
 
     /** A lookup map for each scope and its associated FQN. */
-    private val fqnScopeMap: MutableMap<String, NameScope> = IdentityHashMap()
+    private val fqnScopeMap: MutableMap<String, NameScope> = HashMap()
 
     /** The currently active scope. */
     var currentScope: Scope? = null
@@ -114,7 +113,7 @@ class ScopeManager : ScopeProvider {
     }
 
     companion object {
-        private val LOGGER = LoggerFactory.getLogger(ScopeManager::class.java)
+        val LOGGER = LoggerFactory.getLogger(ScopeManager::class.java)
     }
 
     /**
@@ -143,12 +142,16 @@ class ScopeManager : ScopeProvider {
                 val existing = fqnScopeMap[entry.key]
                 if (existing != null) {
                     // a name scope with an identical FQN already exist. we transfer all
-                    // declarations over to it. We are NOT using [addValueDeclaration] because this
-                    // will add it to the underlying AST node as well. This was already done by the
+                    // declarations over to it. Adding to the AST was already done by the
                     // respective sub-scope manager. We add it directly to the declarations array
                     // instead.
-                    existing.valueDeclarations.addAll(entry.value.valueDeclarations)
-                    existing.structureDeclarations.addAll(entry.value.structureDeclarations)
+                    for (decl in entry.value.valueDeclarations) {
+                        existing.addValueDeclaration(decl, false)
+                    }
+
+                    for (sd in entry.value.structureDeclarations) {
+                        existing.addDeclaration(sd, false)
+                    }
 
                     // copy over the typedefs as well just to be sure
                     existing.typedefs.putAll(entry.value.typedefs)
@@ -626,30 +629,31 @@ class ScopeManager : ScopeProvider {
         ref: DeclaredReferenceExpression,
         scope: Scope? = currentScope
     ): ValueDeclaration? {
-        return resolve<ValueDeclaration>(scope) {
-                if (it.name == ref.name) {
+        val res =
+            resolveName<ValueDeclaration>(scope, ref.name) {
                     // If the reference seems to point to a function the entire signature is checked
                     // for equality
                     if (ref.type is FunctionPointerType && it is FunctionDeclaration) {
                         val fptrType = (ref as HasType).type as FunctionPointerType
                         // TODO(oxisto): This is the third place where function pointers are
                         //   resolved. WHY?
-                        // TODO(oxisto): Support multiple return values
-                        val returnType = it.returnTypes.firstOrNull() ?: IncompleteType()
                         if (
-                            returnType == fptrType.returnType &&
+                            it.returnTypes.size == fptrType.returnTypes.size &&
+                                it.returnTypes
+                                    .filterIndexed { i, it -> fptrType.returnTypes[i] != it }
+                                    .isEmpty() &&
                                 it.hasSignature(fptrType.parameters)
                         ) {
-                            return@resolve true
+                            return@resolveName true
                         }
-                    } else {
-                        return@resolve true
-                    }
-                }
 
-                return@resolve false
-            }
-            .firstOrNull()
+                        return@resolveName false
+                    }
+
+                    return@resolveName true
+                }
+                .firstOrNull()
+        return res
     }
 
     /**
@@ -661,9 +665,9 @@ class ScopeManager : ScopeProvider {
     @JvmOverloads
     fun resolveFunction(
         call: CallExpression,
-        scope: Scope? = currentScope
+        resScope: Scope? = currentScope
     ): List<FunctionDeclaration> {
-        var s = scope
+        var scope = resScope
 
         val fqn = call.fqn
 
@@ -678,21 +682,23 @@ class ScopeManager : ScopeProvider {
             // TODO: proper scope selection
 
             // this is a scoped call. we need to explicitly jump to that particular scope
-            val scopes = filterScopes { (it is NameScope && it.scopedName == scopeName) }
-            s =
-                if (scopes.isEmpty()) {
-                    LOGGER.error(
-                        "Could not find the scope {} needed to resolve the call {}. Falling back to the current scope",
-                        scopeName,
-                        call.fqn
-                    )
-                    currentScope
-                } else {
-                    scopes[0]
-                }
+            scope = lookupScope(scopeName)
+            if (scope == null) {
+                LOGGER.warn(
+                    "Could not find the scope {} needed to resolve the call {}. Falling back to the current scope",
+                    scopeName,
+                    call.fqn
+                )
+                scope = currentScope
+            }
         }
 
-        return resolve(s) { it.name == call.name && it.hasSignature(call.signature) }
+        val res =
+            resolveName<FunctionDeclaration>(scope, call.name) { it: FunctionDeclaration ->
+                it.name == call.name && it.hasSignature(call.signature)
+            }
+
+        return res
     }
 
     fun resolveFunctionStopScopeTraversalOnDefinition(
@@ -738,6 +744,55 @@ class ScopeManager : ScopeProvider {
                         }
                     }
                 }
+
+                declarations.addAll(list)
+            }
+
+            // some (all?) languages require us to stop immediately if we found something on this
+            // scope. This is the case where function overloading is allowed, but only within the
+            // same scope
+            if (stopIfFound && declarations.isNotEmpty()) {
+                return declarations
+            }
+
+            // go upwards in the scope tree
+            scope = scope.parent
+        }
+
+        return declarations
+    }
+
+    inline fun <reified T : Declaration> resolveName(
+        searchScope: Scope?,
+        name: String,
+        stopIfFound: Boolean = false,
+        predicate: (T) -> Boolean
+    ): List<T> {
+        var scope = searchScope
+        val declarations = mutableListOf<T>()
+
+        while (scope != null) {
+            if (scope is ValueDeclarationScope) {
+                declarations.addAll(
+                    scope.valueDeclarationsMap[name]?.filterIsInstance<T>()?.filter(predicate)
+                        ?: emptyList()
+                )
+            }
+
+            if (scope is StructureDeclarationScope) {
+                var list =
+                    scope.structureDeclarationsMap[name]?.filterIsInstance<T>()?.filter(predicate)
+                        ?: emptyList()
+
+                // this was taken over from the old resolveStructureDeclaration.
+                // TODO(oxisto): why is this only when the list is empty?
+                // if (list.isEmpty()) {
+                //     for (declaration in scope.structureDeclarations) {
+                //         if (declaration is RecordDeclaration) {
+                //             list = declaration.templates.filterIsInstance<T>().filter(predicate)
+                //         }
+                //     }
+                // }
 
                 declarations.addAll(list)
             }

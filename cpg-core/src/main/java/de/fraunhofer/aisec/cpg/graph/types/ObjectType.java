@@ -32,6 +32,7 @@ import de.fraunhofer.aisec.cpg.graph.declarations.RecordDeclaration;
 import de.fraunhofer.aisec.cpg.graph.edge.Properties;
 import de.fraunhofer.aisec.cpg.graph.edge.PropertyEdge;
 import java.util.*;
+import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.neo4j.ogm.annotation.Relationship;
 
 /**
@@ -41,15 +42,14 @@ import org.neo4j.ogm.annotation.Relationship;
 public class ObjectType extends Type implements HasType.SecondaryTypeEdge {
 
   @Override
-  public void updateType(Collection<Type> typeState) {
+  public void updateType(Map<Type, Type> typeState) {
     if (this.generics == null) {
       return;
     }
     for (Type t : this.getGenerics()) {
-      for (Type t2 : typeState) {
-        if (t2.equals(t)) {
-          this.replaceGenerics(t, t2);
-        }
+      Type t2 = typeState.get(t);
+      if (t2 != null) {
+        this.replaceGenerics(t, t2);
       }
     }
   }
@@ -78,7 +78,8 @@ public class ObjectType extends Type implements HasType.SecondaryTypeEdge {
   }
 
   private final Modifier modifier;
-  // Reference from the ObjectType to its class (RecordDeclaration) only if the class is available
+  // Reference from the ObjectType to its class (RecordDeclaration) only if the
+  // class is available
   private RecordDeclaration recordDeclaration = null;
 
   @Relationship(value = "GENERICS", direction = "OUTGOING")
@@ -206,6 +207,14 @@ public class ObjectType extends Type implements HasType.SecondaryTypeEdge {
         && PropertyEdge.propertyEqualsList(generics, that.generics)
         && this.primitive == that.primitive
         && this.modifier.equals(that.modifier);
+  }
+
+  @Override
+  public String toString() {
+    return new ToStringBuilder(this, TO_STRING_STYLE)
+        .append("name", getName())
+        .append("generics", this.getGenerics())
+        .toString();
   }
 
   @Override

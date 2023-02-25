@@ -26,11 +26,11 @@
 package de.fraunhofer.aisec.cpg.frontends.golang
 
 import de.fraunhofer.aisec.cpg.TestUtils
+import de.fraunhofer.aisec.cpg.graph.*
 import de.fraunhofer.aisec.cpg.graph.byNameOrNull
-import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
-import de.fraunhofer.aisec.cpg.graph.declarations.MethodDeclaration
-import de.fraunhofer.aisec.cpg.graph.declarations.NamespaceDeclaration
-import de.fraunhofer.aisec.cpg.graph.declarations.RecordDeclaration
+import de.fraunhofer.aisec.cpg.graph.declarations.*
+import de.fraunhofer.aisec.cpg.graph.statements.*
+import de.fraunhofer.aisec.cpg.graph.statements.expressions.*
 import java.nio.file.Path
 import kotlin.test.*
 
@@ -46,10 +46,10 @@ class DeclarationTest {
             ) { it.registerLanguage<GoLanguage>() }
         assertNotNull(tu)
 
-        val main = tu.byNameOrNull<NamespaceDeclaration>("main")
-        assertNotNull(main)
+        val main = tu.namespaces.filter { it.name == "p" }
+        assertTrue(main.size > 0)
 
-        val myStruct = main.byNameOrNull<RecordDeclaration>("main.MyStruct")
+        val myStruct = (main.flatMap { it.records })["p.MyStructU"]
         assertNotNull(myStruct)
 
         // Receiver should be null since its unnamed
@@ -69,11 +69,11 @@ class DeclarationTest {
             ) { it.registerLanguage<GoLanguage>() }
         assertNotNull(tu)
 
-        val main = tu.byNameOrNull<NamespaceDeclaration>("main")
-        assertNotNull(main)
+        val main = tu.namespaces.filter { it.name == "p" }
+        assertTrue(main.size > 0)
 
         // Parameter should be there but not have a name
-        val myGlobalFunc = main.byNameOrNull<FunctionDeclaration>("MyGlobalFunc")
+        val myGlobalFunc = (main.flatMap { it.functions })["MyGlobalFunc"]
         assertNotNull(myGlobalFunc)
 
         val param = myGlobalFunc.parameters.firstOrNull()
@@ -92,13 +92,13 @@ class DeclarationTest {
             ) { it.registerLanguage<GoLanguage>() }
         assertNotNull(tu)
 
-        val main = tu.byNameOrNull<NamespaceDeclaration>("main")
-        assertNotNull(main)
+        val main = tu.namespaces.filter { it.name == "p" }
+        assertTrue(main.size > 0)
 
-        val myInterface = main.byNameOrNull<RecordDeclaration>("main.MyInterface")
+        val myInterface = (main.flatMap { it.records })["p.MyInterface"]
         assertNotNull(myInterface)
 
-        val myOtherInterface = main.byNameOrNull<RecordDeclaration>("main.MyOtherInterface")
+        val myOtherInterface = (main.flatMap { it.records })["p.MyOtherInterface"]
         assertNotNull(myOtherInterface)
 
         // MyOtherInterface should be in the superClasses and superTypeDeclarations of MyInterface,

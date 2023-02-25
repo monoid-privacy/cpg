@@ -572,6 +572,45 @@ fun MetadataProvider.newTypeExpression(
     return node
 }
 
+@JvmOverloads
+fun MetadataProvider.newTupleExpression(
+    members: List<Expression>? = null,
+    code: String? = null,
+    rawNode: Any? = null
+): TupleExpression {
+    val node = TupleExpression()
+    node.applyMetadata(this, rawNode, code)
+
+    if (members != null) {
+        node.setMembers(members)
+    }
+
+    log(node)
+    return node
+}
+
+@JvmOverloads
+fun MetadataProvider.newDestructureTupleExpression(
+    refersTo: Expression? = null,
+    tupleIndex: Int? = null,
+    code: String? = null,
+    rawNode: Any? = null
+): DestructureTupleExpression {
+    val node = DestructureTupleExpression()
+    node.applyMetadata(this, rawNode, code)
+
+    if (refersTo != null) {
+        node.setRefersTo(refersTo)
+    }
+
+    if (tupleIndex != null) {
+        node.setTupleIndex(tupleIndex)
+    }
+
+    log(node)
+    return node
+}
+
 /**
  * Creates a new [ProblemExpression]. The [MetadataProvider] receiver will be used to fill different
  * meta-data using [Node.applyMetadata]. Calling this extension function outside of Kotlin requires

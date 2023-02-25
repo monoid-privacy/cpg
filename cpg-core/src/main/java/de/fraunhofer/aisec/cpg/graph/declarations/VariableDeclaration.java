@@ -113,8 +113,10 @@ public class VariableDeclaration extends ValueDeclaration
     if (initializer != null) {
       initializer.registerTypeListener(this);
 
-      // if the initializer implements a type listener, inform it about our type changes
-      // since the type is tied to the declaration, but it is convenient to have the type
+      // if the initializer implements a type listener, inform it about our type
+      // changes
+      // since the type is tied to the declaration, but it is convenient to have the
+      // type
       // information in the initializer, i.e. in a ConstructExpression.
       if (initializer instanceof TypeListener) {
         this.registerTypeListener((TypeListener) initializer);
@@ -128,16 +130,20 @@ public class VariableDeclaration extends ValueDeclaration
       return;
     }
     if (!TypeManager.getInstance().isUnknown(this.type)
-        && src.getPropagationType().equals(oldType)) {
+        && (src.getPropagationType().equals(oldType)
+            || TypeManager.getInstance().isUnknown(src.getPropagationType()))) {
       return;
     }
 
     Type previous = this.type;
     Type newType;
     if (src == initializer && initializer instanceof InitializerListExpression) {
-      // Init list is seen as having an array type, but can be used ambiguously. It can be either
-      // used to initialize an array, or to initialize some objects. If it is used as an
-      // array initializer, we need to remove the array/pointer layer from the type, otherwise it
+      // Init list is seen as having an array type, but can be used ambiguously. It
+      // can be either
+      // used to initialize an array, or to initialize some objects. If it is used as
+      // an
+      // array initializer, we need to remove the array/pointer layer from the type,
+      // otherwise it
       // can be ignored once we have a type
       if (isArray) {
         newType = src.getType();

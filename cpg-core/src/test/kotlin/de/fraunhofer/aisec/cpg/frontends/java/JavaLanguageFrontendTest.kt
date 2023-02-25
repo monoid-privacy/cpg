@@ -687,12 +687,15 @@ internal class JavaLanguageFrontendTest : BaseTest() {
 
         val p = tu.namespaces["compiling"]
         val forEachClass = p.records["compiling.ForEach"]
+        val codeVar = p.variables["j"]
+        assertNotNull(codeVar)
+
         val forIterator = forEachClass.methods["forIterator"]
         assertNotNull(forIterator)
 
         val forEach = forIterator.bodyOrNull<ForEachStatement>()
         assertNotNull(forEach)
 
-        assertContains(forEach.variable.prevDFG, forEach.iterable)
+        assertContains(codeVar.prevDFG, forEach.iterable)
     }
 }

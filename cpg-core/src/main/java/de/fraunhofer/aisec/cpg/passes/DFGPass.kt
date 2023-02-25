@@ -28,20 +28,26 @@ package de.fraunhofer.aisec.cpg.passes
 import de.fraunhofer.aisec.cpg.TranslationResult
 import de.fraunhofer.aisec.cpg.graph.AccessValues
 import de.fraunhofer.aisec.cpg.graph.Assignment
+import de.fraunhofer.aisec.cpg.graph.DFGTag
+import de.fraunhofer.aisec.cpg.graph.DFGTagDirection
 import de.fraunhofer.aisec.cpg.graph.Node
 import de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration
+import de.fraunhofer.aisec.cpg.graph.declarations.ValueDeclaration
 import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.CompoundStatement
+import de.fraunhofer.aisec.cpg.graph.statements.DeclarationStatement
 import de.fraunhofer.aisec.cpg.graph.statements.ForEachStatement
 import de.fraunhofer.aisec.cpg.graph.statements.ReturnStatement
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.*
 import de.fraunhofer.aisec.cpg.helpers.SubgraphWalker.IterativeGraphWalker
 import de.fraunhofer.aisec.cpg.helpers.Util
 import de.fraunhofer.aisec.cpg.passes.order.DependsOn
+import java.util.UUID
 
 /** Adds the DFG edges for various types of nodes. */
 @DependsOn(VariableUsageResolver::class)
+@DependsOn(CallResolver::class)
 class DFGPass : Pass() {
     override fun accept(tr: TranslationResult) {
         val inferDfgForUnresolvedCalls =
@@ -50,6 +56,19 @@ class DFGPass : Pass() {
         walker.registerOnNodeVisit2 { node, parent ->
             handle(node, parent, inferDfgForUnresolvedCalls)
         }
+        for (tu in tr.translationUnits) {
+            walker.iterate(tu)
+        }
+
+        walker.clearCallbacks()
+        walker.registerOnNodeVisit { node ->
+            when (node) {
+                is TupleExpression -> handleTupleExpression(node)
+                is ArraySubscriptionExpression -> resolveArraySubscriptionExpressionRef(node)
+                is FieldDeclaration -> resolveFieldWrites(node)
+            }
+        }
+
         for (tu in tr.translationUnits) {
             walker.iterate(tu)
         }
@@ -90,6 +109,58 @@ class DFGPass : Pass() {
         }
     }
 
+    private fun resolveFieldWrites(node: FieldDeclaration) {
+        val usages =
+            node.usages
+                .filter {
+                    it.access == AccessValues.WRITE &&
+                        it is MemberExpression &&
+                        it.base is DeclaredReferenceExpression
+                }
+                .mapNotNull {
+                    val b = (it as MemberExpression).base
+                    Pair(it, (b as DeclaredReferenceExpression).refersTo)
+                }
+                .filter { (_, it) -> it is VariableDeclaration }
+
+        for ((usg, dec) in usages) {
+            dec?.addPrevDFG(usg)
+        }
+    }
+
+    private fun handleTupleExpression(node: TupleExpression) {
+        val worklist = mutableListOf<Node>(node)
+        val seen = mutableSetOf<Node>()
+
+        while (!worklist.isEmpty()) {
+            val n = worklist.removeLast()
+
+            if (n in seen) {
+                continue
+            }
+
+            seen.add(n)
+
+            if (n is DestructureTupleExpression) {
+                val ix = n.getTupleIndex()
+                val members = node.getMembers()
+                if (ix < members.size) {
+                    members.get(ix).addNextDFG(n)
+                }
+
+                if (n.getRefersTo() != null) {
+                    n.removePrevDFG(n.getRefersTo())
+                }
+
+                continue
+            }
+
+            for (ch in n.nextDFG) {
+                worklist.add(ch)
+            }
+        }
+    }
+
     /**
      * For a [MemberExpression], the base flows to the expression if the field is not implemented in
      * the code under analysis. Otherwise, it's handled as a [DeclaredReferenceExpression].
@@ -110,7 +181,15 @@ class DFGPass : Pass() {
      * the function.
      */
     private fun handleVariableDeclaration(node: VariableDeclaration) {
-        node.initializer?.let { node.addPrevDFG(it) }
+        val ni = node.initializer
+
+        if (ni != null) {
+            node.addPrevDFG(ni)
+        }
+
+        // node.initializer?.let {
+        //     node.addPrevDFG(it)
+        // }
     }
 
     /**
@@ -148,7 +227,15 @@ class DFGPass : Pass() {
      * [ForEachStatement.iterable] to the [ForEachStatement.variable].
      */
     private fun handleForEachStatement(node: ForEachStatement) {
-        node.variable.addPrevDFG(node.iterable)
+        for (v in node.getVariables()) {
+            if (v is DeclarationStatement) {
+                for (d in v.getDeclarations()) {
+                    d.addPrevDFG(node.iterable)
+                }
+            } else {
+                v.addPrevDFG(node.iterable)
+            }
+        }
     }
 
     /**
@@ -242,7 +329,35 @@ class DFGPass : Pass() {
      * result `x[i]`.
      */
     private fun handleArraySubscriptionExpression(node: ArraySubscriptionExpression) {
+        if (node.arrayExpression == null) return
         node.arrayExpression?.let { node.addPrevDFG(it) }
+    }
+
+    private fun resolveArraySubscriptionExpressionRef(node: ArraySubscriptionExpression) {
+        if (node.arrayExpression == null) return
+
+        if (!node.prevDFG.isEmpty()) {
+            val worklist = mutableListOf<Node>(node.arrayExpression!!)
+            val seen = mutableSetOf<Node>(node)
+
+            while (!worklist.isEmpty()) {
+                val n = worklist.removeLast()
+                if (n in seen) {
+                    continue
+                }
+
+                seen.add(n)
+
+                if (n is ValueDeclaration && n.type == node.arrayExpression!!.type) {
+                    n.addPrevDFG(node)
+                    continue
+                }
+
+                for (ch in n.prevDFG) {
+                    worklist.add(ch)
+                }
+            }
+        }
     }
 
     /**
@@ -308,16 +423,17 @@ class DFGPass : Pass() {
     fun handleCallExpression(call: CallExpression, inferDfgForUnresolvedSymbols: Boolean) {
         // Remove existing DFG edges since they are no longer valid (e.g. after updating the
         // CallExpression with the invokes edges to the called functions)
-        call.prevDFG.forEach { it.nextDFG.remove(call) }
-        call.prevDFG.clear()
+        call.clearPrevDFG()
 
         if (call.invokes.isEmpty() && inferDfgForUnresolvedSymbols) {
             // Unresolved call expression
             handleUnresolvedCalls(call)
         } else if (call.invokes.isNotEmpty()) {
             call.invokes.forEach {
-                Util.attachCallParameters(it, call.arguments)
-                call.addPrevDFG(it)
+                val callID = UUID.randomUUID().toString()
+
+                Util.attachCallParameters(it, call.arguments, callID)
+                call.addPrevDFG(it, DFGTag(callID, DFGTagDirection.EXIT))
             }
         }
     }

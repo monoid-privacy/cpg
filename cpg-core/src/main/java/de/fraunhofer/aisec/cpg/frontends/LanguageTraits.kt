@@ -85,9 +85,16 @@ interface HasComplexCallResolution : LanguageTrait {
     fun refineInvocationCandidatesFromRecord(
         recordDeclaration: RecordDeclaration,
         call: CallExpression,
-        namePattern: Pattern
+        namePattern: Pattern,
+        callResolver: CallResolver
     ): List<FunctionDeclaration>
 }
+
+interface HasNoMultipleFunctionNames : LanguageTrait
+
+interface HasImplicitInterfaces : LanguageTrait
+
+interface HasNoClassScope : LanguageTrait
 
 /** A language trait that specifies if the language supports function pointers. */
 interface HasFunctionPointers : LanguageTrait

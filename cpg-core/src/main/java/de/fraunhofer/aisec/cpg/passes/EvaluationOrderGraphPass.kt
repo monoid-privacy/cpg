@@ -180,11 +180,20 @@ open class EvaluationOrderGraphPass : Pass() {
         map[ConditionalExpression::class.java] = CallableInterface {
             handleConditionalExpression(it as ConditionalExpression)
         }
+        map[KeyValueExpression::class.java] = CallableInterface {
+            handleKeyValueExpression(it as KeyValueExpression)
+        }
         map[InitializerListExpression::class.java] = CallableInterface {
             handleInitializerListExpression(it as InitializerListExpression)
         }
         map[ConstructExpression::class.java] = CallableInterface {
             handleConstructExpression(it as ConstructExpression)
+        }
+        map[TupleExpression::class.java] = CallableInterface {
+            handleTupleExpression(it as TupleExpression)
+        }
+        map[DestructureTupleExpression::class.java] = CallableInterface {
+            handleDestructureTupleDeclaration(it as DestructureTupleExpression)
         }
         map[EmptyStatement::class.java] = CallableInterface { handleDefault(it as EmptyStatement) }
         map[Literal::class.java] = CallableInterface { handleDefault(it) }
@@ -283,6 +292,18 @@ open class EvaluationOrderGraphPass : Pass() {
             createEOG(records)
         }
         scopeManager.leaveScope(node)
+    }
+
+    protected fun handleKeyValueExpression(node: KeyValueExpression) {
+        if (node.key != null) {
+            createEOG(node.key!!)
+        }
+
+        if (node.value != null) {
+            createEOG(node.value!!)
+        }
+
+        pushToEOG(node)
     }
 
     protected fun handleStatementHolder(statementHolder: StatementHolder) {
@@ -405,6 +426,18 @@ open class EvaluationOrderGraphPass : Pass() {
             createEOG(arg)
         }
         // then the call itself
+        pushToEOG(node)
+    }
+
+    protected fun handleDestructureTupleDeclaration(node: DestructureTupleExpression) {
+        pushToEOG(node)
+    }
+
+    protected fun handleTupleExpression(node: TupleExpression) {
+        for (m in node.getMembers()) {
+            createEOG(m)
+        }
+
         pushToEOG(node)
     }
 
@@ -829,8 +862,9 @@ open class EvaluationOrderGraphPass : Pass() {
     protected fun handleForEachStatement(node: ForEachStatement) {
         scopeManager.enterScope(node)
         createEOG(node.iterable)
-        createEOG(node.variable)
-        node.addPrevDFG(node.variable)
+        for (v in node.getVariables()) {
+            createEOG(v)
+        }
         pushToEOG(node) // To have semantic information after the variable declaration
         currentProperties[Properties.BRANCH] = true
         val tmpEOGNodes = ArrayList(currentEOG)
@@ -861,7 +895,11 @@ open class EvaluationOrderGraphPass : Pass() {
         currentProperties[Properties.BRANCH] = true
         val tmpEOGNodes = ArrayList(currentEOG)
         createEOG(node.statement)
-        createEOG(node.iterationStatement)
+
+        if (node.iterationStatement != null) {
+            createEOG(node.iterationStatement)
+        }
+
         connectCurrentToLoopStart()
         currentEOG.clear()
         val currentLoopScope = scopeManager.leaveScope(node) as LoopScope?

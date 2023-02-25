@@ -44,9 +44,12 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.neo4j.ogm.annotation.Relationship;
 import org.neo4j.ogm.annotation.Transient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** A declaration who has a type. */
 public abstract class ValueDeclaration extends Declaration implements HasType {
+  public static final Logger LOGGER = LoggerFactory.getLogger(VariableDeclaration.class);
 
   protected Type type = UnknownType.getUnknownType();
 
@@ -65,7 +68,8 @@ public abstract class ValueDeclaration extends Declaration implements HasType {
   public Type getType() {
     Type result;
     if (TypeManager.isTypeSystemActive()) {
-      // just to make sure that we REALLY always return a valid type in case this somehow gets set
+      // just to make sure that we REALLY always return a valid type in case this
+      // somehow gets set
       // to null
       result = type != null ? type : UnknownType.getUnknownType();
     } else {
@@ -83,8 +87,9 @@ public abstract class ValueDeclaration extends Declaration implements HasType {
 
   /** All usages of the variable/field. */
   public List<DeclaredReferenceExpression> getUsages() {
-    return unwrap(usageEdges, false);
+    return unwrap(usageEdges, true);
   }
+
   /** All usages of the variable/field with the access value. */
   public List<PropertyEdge<DeclaredReferenceExpression>> getUsageEdges() {
     return usageEdges;
@@ -107,6 +112,7 @@ public abstract class ValueDeclaration extends Declaration implements HasType {
   public void setUsageEdges(List<PropertyEdge<DeclaredReferenceExpression>> usageEdges) {
     this.usageEdges = usageEdges;
   }
+
   /** Adds the usage of the variable/field. */
   public void addUsageEdge(PropertyEdge<DeclaredReferenceExpression> usageEdge) {
     this.usageEdges.add(usageEdge);
@@ -128,7 +134,12 @@ public abstract class ValueDeclaration extends Declaration implements HasType {
   @Override
   public Type getPropagationType() {
     if (this.type instanceof ReferenceType) {
-      return ((ReferenceType) this.type).getElementType();
+      Type elType = ((ReferenceType) this.type).getElementType();
+      if (elType == null) {
+        elType = UnknownType.getUnknownType();
+      }
+
+      return elType;
     }
     return getType();
   }

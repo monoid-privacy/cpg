@@ -74,23 +74,22 @@ abstract class SymbolResolverPass : Pass() {
         name: String,
         fctPtrType: FunctionPointerType
     ): Boolean {
-        return this.matches(name, fctPtrType.returnType, fctPtrType.parameters)
+        return this.matches(name, fctPtrType.returnTypes, fctPtrType.parameters)
     }
 
     /** Checks if the function has the given [name], [returnType] and [signature] */
     protected fun FunctionDeclaration.matches(
         name: String,
-        returnType: Type,
+        returnTypes: List<Type>,
         signature: List<Type?>
     ): Boolean {
-        val thisReturnType =
-            if (this.returnTypes.isEmpty()) {
-                IncompleteType()
-            } else {
-                // TODO(oxisto): support multiple return types
-                this.returnTypes[0]
-            }
-        return this.name == name && thisReturnType == returnType && this.hasSignature(signature)
+        if (this.returnTypes.size != returnTypes.size) {
+            return false
+        }
+
+        return this.name == name &&
+            this.returnTypes.filterIndexed { i, it -> returnTypes[i] != it }.isEmpty() &&
+            this.hasSignature(signature)
     }
 
     protected fun collectSupertypes() {

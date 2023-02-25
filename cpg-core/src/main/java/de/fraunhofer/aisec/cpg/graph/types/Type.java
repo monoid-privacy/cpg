@@ -25,6 +25,7 @@
  */
 package de.fraunhofer.aisec.cpg.graph.types;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import de.fraunhofer.aisec.cpg.graph.Node;
 import java.util.*;
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -265,6 +266,7 @@ public abstract class Type extends Node {
    *
    * @return root Type
    */
+  @JsonBackReference
   public Type getRoot() {
     if (this instanceof SecondOrderType) {
       return ((SecondOrderType) this).getElementType().getRoot();
@@ -328,7 +330,8 @@ public abstract class Type extends Node {
         // TODO(oxisto): convert FunctionPointerType to second order type
         || this instanceof FunctionPointerType
         || this instanceof IncompleteType
-        || this instanceof ParameterizedType;
+        || this instanceof ParameterizedType
+        || this instanceof TupleType;
   }
 
   /**

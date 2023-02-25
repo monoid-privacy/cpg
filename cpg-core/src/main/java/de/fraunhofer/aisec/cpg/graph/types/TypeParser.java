@@ -31,6 +31,7 @@ import de.fraunhofer.aisec.cpg.frontends.cpp.CPPLanguage;
 import de.fraunhofer.aisec.cpg.graph.TypeManager;
 import de.fraunhofer.aisec.cpg.passes.scopes.ScopeManager;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -252,13 +253,20 @@ public class TypeParser {
         && language instanceof HasTemplates) { // TODO: Change to Trait
       String generics = type.substring(type.indexOf('<') + 1, type.lastIndexOf('>'));
 
-      /* Explanation from @vfsrfs:
-       * We fist extract the generic string (the substring between < and >). Then, the elaborate
-       * string can either start directly with the elaborate type specifier e.g. struct Node or it
-       * must be preceded by <, \\h (horizontal whitespace), or ,. If any other character precedes
-       * the elaborate type specifier then it is not considered to be a type specifier e.g.
-       * mystruct. Then there can be an arbitrary amount of horizontal whitespaces. This is followed
-       * by the elaborate type specifier and at least one more horizontal whitespace, which marks
+      /*
+       * Explanation from @vfsrfs:
+       * We fist extract the generic string (the substring between < and >). Then, the
+       * elaborate
+       * string can either start directly with the elaborate type specifier e.g.
+       * struct Node or it
+       * must be preceded by <, \\h (horizontal whitespace), or ,. If any other
+       * character precedes
+       * the elaborate type specifier then it is not considered to be a type specifier
+       * e.g.
+       * mystruct. Then there can be an arbitrary amount of horizontal whitespaces.
+       * This is followed
+       * by the elaborate type specifier and at least one more horizontal whitespace,
+       * which marks
        * that it is indeed an elaborate type and not something like structMy.
        */
       for (String elaborate :
@@ -635,7 +643,8 @@ public class TypeParser {
       }
 
       if (part.equals("&")) {
-        // CPP ReferenceTypes are indicated by an & at the end of the typeName e.g. int&, and are
+        // CPP ReferenceTypes are indicated by an & at the end of the typeName e.g.
+        // int&, and are
         // handled differently to a pointer
         Type.Qualifier oldQualifier = finalType.getQualifier();
         Type.Storage oldStorage = finalType.getStorage();
@@ -652,12 +661,14 @@ public class TypeParser {
       }
 
       if (part.startsWith("(") && part.endsWith(")")) {
-        // BracketExpressions change the binding of operators they are stored in order to be
+        // BracketExpressions change the binding of operators they are stored in order
+        // to be
         // processed afterwards
         bracketExpressions.add(part);
       }
 
-      // Check storage and qualifiers specifierd that are defined after the typeName e.g. int const
+      // Check storage and qualifiers specifierd that are defined after the typeName
+      // e.g. int const
       if (isStorageSpecifier(part, language)) {
         List<String> specifiers = new ArrayList<>();
         specifiers.add(part);
@@ -682,7 +693,8 @@ public class TypeParser {
 
   private static ObjectType.Modifier determineModifier(
       List<String> typeBlocks, boolean primitiveType) {
-    // Default is signed, unless unsigned keyword is specified. For other classes that are not
+    // Default is signed, unless unsigned keyword is specified. For other classes
+    // that are not
     // primitive this is NOT_APPLICABLE
     ObjectType.Modifier modifier = ObjectType.Modifier.NOT_APPLICABLE;
     if (primitiveType) {
@@ -736,22 +748,26 @@ public class TypeParser {
     // Separate typeString into a List containing each part of the typeString
     List<String> typeBlocks = separate(type);
 
-    // Depending on if the Type is primitive or not signed/unsigned must be set differently (only
+    // Depending on if the Type is primitive or not signed/unsigned must be set
+    // differently (only
     // relevant for ObjectTypes)
     boolean primitiveType = isPrimitiveType(typeBlocks, language);
 
-    // Default is signed, unless unsigned keyword is specified. For other classes that are not
+    // Default is signed, unless unsigned keyword is specified. For other classes
+    // that are not
     // primitive this is NOT_APPLICABLE
     ObjectType.Modifier modifier = determineModifier(typeBlocks, primitiveType);
 
-    // Join compound primitive types into one block i.e. types consisting of more than one word e.g.
+    // Join compound primitive types into one block i.e. types consisting of more
+    // than one word e.g.
     // long long int (only primitive types)
     typeBlocks = joinPrimitive(typeBlocks, language);
 
     List<String> qualifierList = new ArrayList<>();
     List<String> storageList = new ArrayList<>();
 
-    // Handle preceding qualifier or storage specifier to the type name e.g. static const int
+    // Handle preceding qualifier or storage specifier to the type name e.g. static
+    // const int
     int counter = 0;
     for (String part : typeBlocks) {
       if (isQualifierSpecifier(part, language)) {
@@ -771,9 +787,11 @@ public class TypeParser {
     Type.Storage storageValue = calcStorage(storageList);
     Type.Qualifier qualifier = calcQualifier(qualifierList, null);
 
-    // Once all preceding known keywords (if any) are handled the next word must be the TypeName
+    // Once all preceding known keywords (if any) are handled the next word must be
+    // the TypeName
     if (counter >= typeBlocks.size()) {
-      // Note that "const auto ..." will end here with typeName="const" as auto is not supported.
+      // Note that "const auto ..." will end here with typeName="const" as auto is not
+      // supported.
       return UnknownType.getUnknownType(language);
     }
     String typeName = typeBlocks.get(counter);
@@ -790,7 +808,8 @@ public class TypeParser {
       List<Type> parameterList = getParameterList(funcptr.group("args"), language);
 
       return typeManager.registerType(
-          new FunctionPointerType(qualifier, storageValue, parameterList, returnType, language));
+          new FunctionPointerType(
+              qualifier, storageValue, parameterList, Arrays.asList(returnType), language));
     } else if (isIncompleteType(typeName)) {
       // IncompleteType e.g. void
       finalType = new IncompleteType();
@@ -808,8 +827,10 @@ public class TypeParser {
     }
 
     if (finalType.getTypeName().equals("auto") || (type.contains("auto") && !primitiveType)) {
-      // In C++17 if auto keyword is used the compiler infers the type automatically, hence we
-      // are not able to find out, which type this should be, it will be resolved due to
+      // In C++17 if auto keyword is used the compiler infers the type automatically,
+      // hence we
+      // are not able to find out, which type this should be, it will be resolved due
+      // to
       // dataflow
       return UnknownType.getUnknownType(language);
     }
@@ -824,7 +845,8 @@ public class TypeParser {
     // Resolve BracketExpressions that were identified previously
     finalType = resolveBracketExpression(finalType, bracketExpressions, language);
 
-    // Make sure, that only one real instance exists for a type in order to have just one node in
+    // Make sure, that only one real instance exists for a type in order to have
+    // just one node in
     // the graph representing the type
     finalType = typeManager.registerType(finalType);
 

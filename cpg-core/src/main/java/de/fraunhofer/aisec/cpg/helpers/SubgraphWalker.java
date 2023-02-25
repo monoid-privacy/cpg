@@ -104,6 +104,7 @@ public class SubgraphWalker {
     if (node == null) return children;
 
     Class<?> classType = node.getClass();
+
     for (Field field : getAllFields(classType)) {
       SubGraph subGraph = field.getAnnotation(SubGraph.class);
       if (subGraph != null && Arrays.asList(subGraph.value()).contains("AST")) {
@@ -161,7 +162,8 @@ public class SubgraphWalker {
       return new ArrayList<>();
     }
 
-    // We are using an identity set here, to avoid placing the *same* node in the identitySet twice,
+    // We are using an identity set here, to avoid placing the *same* node in the
+    // identitySet twice,
     // possibly resulting in loops
     var identitySet = new IdentitySet<Node>();
 
@@ -298,7 +300,8 @@ public class SubgraphWalker {
           Node exiting = backlog.pop();
           onScopeExit.forEach(c -> c.accept(exiting));
         } else {
-          // re-place the current node as a marker for the above check to find out when we need to
+          // re-place the current node as a marker for the above check to find out when we
+          // need to
           // exit a scope
           todo.push(new kotlin.Pair<>(current, parent));
           onNodeVisit.forEach(c -> c.accept(current));
@@ -329,6 +332,7 @@ public class SubgraphWalker {
     }
 
     public void clearCallbacks() {
+      onNodeVisit2.clear();
       onNodeVisit.clear();
       onScopeExit.clear();
     }
@@ -413,7 +417,8 @@ public class SubgraphWalker {
                 current); // we can be in an inner class, so we remember this as a stack
       }
 
-      // TODO: actually we should not handle this in handleNode but have something similar to
+      // TODO: actually we should not handle this in handleNode but have something
+      // similar to
       // onScopeEnter because the method declaration already correctly sets the scope
 
       // methods can also contain record scopes
@@ -489,7 +494,8 @@ public class SubgraphWalker {
             nodeToParentBlockAndContainedValueDeclarations.get(currentScope);
         for (ValueDeclaration val : entry.getRight()) {
           // make sure that we only add the variable for the current scope.
-          // if the var is already added, all outside vars with this name are shadowed inside a
+          // if the var is already added, all outside vars with this name are shadowed
+          // inside a
           // scope and we do not add them here
           if (val instanceof FunctionDeclaration || !scopedVars.contains(val.getName())) {
             result.add(val);

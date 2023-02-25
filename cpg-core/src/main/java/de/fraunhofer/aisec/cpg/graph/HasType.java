@@ -27,8 +27,8 @@ package de.fraunhofer.aisec.cpg.graph;
 
 import de.fraunhofer.aisec.cpg.graph.types.Type;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.jetbrains.annotations.NotNull;
 
@@ -111,6 +111,6 @@ public interface HasType {
    * updateType method, so that the current type is always replaced with the merged one
    */
   interface SecondaryTypeEdge {
-    void updateType(Collection<Type> typeState);
+    void updateType(Map<Type, Type> typeState);
   }
 }

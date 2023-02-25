@@ -26,6 +26,7 @@
 package de.fraunhofer.aisec.cpg.passes
 
 import de.fraunhofer.aisec.cpg.TranslationResult
+import de.fraunhofer.aisec.cpg.frontends.HasFunctionPointers
 import de.fraunhofer.aisec.cpg.frontends.cpp.CXXLanguageFrontend
 import de.fraunhofer.aisec.cpg.graph.HasType
 import de.fraunhofer.aisec.cpg.graph.Node
@@ -36,14 +37,13 @@ import de.fraunhofer.aisec.cpg.graph.declarations.ValueDeclaration
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.CallExpression
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.MemberCallExpression
 import de.fraunhofer.aisec.cpg.graph.types.FunctionPointerType
-import de.fraunhofer.aisec.cpg.graph.types.IncompleteType
-import de.fraunhofer.aisec.cpg.graph.types.Type
+import de.fraunhofer.aisec.cpg.graph.types.FunctionType
 import de.fraunhofer.aisec.cpg.helpers.IdentitySet
 import de.fraunhofer.aisec.cpg.helpers.SubgraphWalker.ScopedWalker
 import de.fraunhofer.aisec.cpg.passes.order.DependsOn
-import de.fraunhofer.aisec.cpg.passes.order.RequiredFrontend
+import de.fraunhofer.aisec.cpg.passes.order.ExecuteBefore
+import de.fraunhofer.aisec.cpg.passes.order.RequiredLanguageTrait
 import java.util.*
-import java.util.function.Consumer
 
 /**
  * This [Pass] is responsible for resolving function pointer calls, i.e., [CallExpression] nodes
@@ -58,7 +58,8 @@ import java.util.function.Consumer
  */
 @DependsOn(CallResolver::class)
 @DependsOn(DFGPass::class)
-@RequiredFrontend(CXXLanguageFrontend::class)
+@ExecuteBefore(ControlFlowSensitiveDFGPass::class)
+@RequiredLanguageTrait(HasFunctionPointers::class)
 class FunctionPointerCallResolver : Pass() {
     private lateinit var walker: ScopedWalker
     private var inferDfgForUnresolvedCalls = false
@@ -94,8 +95,9 @@ class FunctionPointerCallResolver : Pass() {
         // resolve the call expression to a declaration that contains the pointer.
         val pointer =
             scopeManager
-                .resolve<ValueDeclaration>(scopeManager.currentScope, true) {
-                    it.type is FunctionPointerType && it.name == call.name
+                .resolveName<ValueDeclaration>(scopeManager.currentScope, call.name, true) {
+                    (it.type is FunctionPointerType ||
+                        (it.type is FunctionType && it !is FunctionDeclaration))
                 }
                 ?.firstOrNull()
         if (pointer != null) {
@@ -115,35 +117,42 @@ class FunctionPointerCallResolver : Pass() {
     }
 
     private fun handleFunctionPointerCall(call: CallExpression, pointer: Node?) {
-        val pointerType = (pointer as HasType).type as FunctionPointerType
+        if (pointer !is HasType) return
+
+        val pointerType =
+            if (pointer.type is FunctionPointerType) {
+                pointer.type as FunctionPointerType
+            } else if (pointer.type is FunctionType) {
+                (pointer.type as FunctionType).reference(null) as FunctionPointerType
+            } else {
+                null
+            }
+
+        if (pointerType == null) return
+
         val invocationCandidates: MutableList<FunctionDeclaration> = ArrayList()
-        val work: Deque<Node> = ArrayDeque()
+        val work = mutableListOf<Node>()
         val seen = IdentitySet<Node>()
-        work.push(pointer)
+        work.add(pointer)
+
         while (!work.isEmpty()) {
-            val curr = work.pop()
-            if (!seen.add(curr)) {
+            val curr = work.removeLast()
+            val s = seen.add(curr)
+
+            if (!s) {
                 continue
             }
 
             if (curr is FunctionDeclaration) {
-                // Even if it is a function declaration, the dataflow might just come from a
-                // situation where the target of a fptr is passed through via a return value. Keep
-                // searching if return type or signature don't match
-
-                // In some languages, there might be no explicit return type. In this case we are
-                // using a single void return type.
-                val returnType: Type =
-                    if (curr.returnTypes.isEmpty()) {
-                        IncompleteType()
-                    } else {
-                        // TODO(oxisto): support multiple return types
-                        curr.returnTypes[0]
-                    }
                 if (
-                    TypeManager.getInstance()
-                        .isSupertypeOf(pointerType.returnType, returnType, call) &&
-                        curr.hasSignature(pointerType.parameters)
+                    curr.returnTypes.size == pointerType.returnTypes.size &&
+                        curr.returnTypes
+                            .filterIndexed { i, it ->
+                                !TypeManager.getInstance()
+                                    .isSupertypeOf(pointerType.returnTypes[i], it, call) &&
+                                    curr.hasSignature(pointerType.parameters)
+                            }
+                            .isEmpty()
                 ) {
                     invocationCandidates.add(curr)
                     // We have found a target. Don't follow this path any further, but still
@@ -153,12 +162,18 @@ class FunctionPointerCallResolver : Pass() {
                     continue
                 }
             }
-            curr.prevDFG.forEach(Consumer(work::push))
+
+            work.addAll(curr.prevDFG)
+        }
+
+        if (invocationCandidates.size > 3) {
+            return
         }
 
         call.invokes = invocationCandidates
         // We have to update the dfg edges because this call could now be resolved (which was not
         // the case before).
+
         DFGPass().handleCallExpression(call, inferDfgForUnresolvedCalls)
     }
 

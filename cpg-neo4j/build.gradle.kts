@@ -58,4 +58,7 @@ dependencies {
     // Command line interface support
     api(libs.picocli)
     annotationProcessor(libs.picocli.codegen)
+
+    api(project(":cpg-language-go"))
+    api(project(":cpg-analysis"))
 }

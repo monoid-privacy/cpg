@@ -32,17 +32,26 @@ import de.fraunhofer.aisec.cpg.graph.declarations.ValueDeclaration
 
 open class StructureDeclarationScope(final override var astNode: Node?) :
     ValueDeclarationScope(astNode) {
-    var structureDeclarations = mutableListOf<Declaration>()
+    var structureDeclarationsMap = mutableMapOf<String, MutableList<Declaration>>()
+    var structureDeclarations: List<Declaration> = emptyList()
+        get() = structureDeclarationsMap.values.flatten()
 
-    private fun addStructureDeclaration(declaration: Declaration) {
-        structureDeclarations.add(declaration)
-        if (astNode is DeclarationHolder) {
-            val holder = astNode as DeclarationHolder
-            holder.addDeclaration(declaration)
-        } else {
-            log.error(
-                "Trying to add a value declaration to a scope which does not have a declaration holder AST node"
-            )
+    private fun addStructureDeclaration(declaration: Declaration, addToAST: Boolean) {
+        if (declaration.name !in structureDeclarationsMap) {
+            structureDeclarationsMap[declaration.name] = mutableListOf<Declaration>()
+        }
+
+        structureDeclarationsMap[declaration.name]!!.add(declaration)
+
+        if (addToAST) {
+            if (astNode is DeclarationHolder) {
+                val holder = astNode as DeclarationHolder
+                holder.addDeclaration(declaration)
+            } else {
+                log.error(
+                    "Trying to add a value declaration to a scope which does not have a declaration holder AST node"
+                )
+            }
         }
     }
 
@@ -50,7 +59,7 @@ open class StructureDeclarationScope(final override var astNode: Node?) :
         if (declaration is ValueDeclaration) {
             addValueDeclaration(declaration, addToAST)
         } else {
-            addStructureDeclaration(declaration)
+            addStructureDeclaration(declaration, addToAST)
         }
     }
 }

@@ -97,6 +97,8 @@ private constructor(
                     if (pass.runsWithCurrentFrontend(executedFrontends)) {
                         executedPasses.add(pass)
                         pass.accept(result)
+                    } else {
+                        log.info("Doesnt run with frontend")
                     }
                     bench.addMeasurement()
                     if (result.isCancelled) {
@@ -160,8 +162,12 @@ private constructor(
                         Files.find(
                                 file.toPath(),
                                 999,
-                                { _: Path?, fileAttr: BasicFileAttributes ->
-                                    fileAttr.isRegularFile
+                                { p: Path?, fileAttr: BasicFileAttributes ->
+                                    fileAttr.isRegularFile &&
+                                        !(p != null &&
+                                            file.toPath().relativize(p).any {
+                                                it.toString().contains("test")
+                                            })
                                 }
                             )
                             .map { it.toFile() }
@@ -186,6 +192,7 @@ private constructor(
                         listOf(file)
                     }
                 }
+
             if (config.useUnityBuild) {
                 val tmpFile = Files.createTempFile("compile", ".cpp").toFile()
                 tmpFile.deleteOnExit()
@@ -231,6 +238,7 @@ private constructor(
 
                 result.components.forEach { s ->
                     s.translationUnits.forEach {
+                        log.warn("IT: " + it)
                         val bench =
                             Benchmark(this.javaClass, "Activating types for ${it.name}", true)
                         result.scopeManager.activateTypes(it)
@@ -342,7 +350,7 @@ private constructor(
             frontend = getFrontend(sourceLocation, scopeManager)
 
             if (frontend == null) {
-                log.error("Found no parser frontend for ${sourceLocation.name}")
+                log.warn("Found no parser frontend for ${sourceLocation.name}")
 
                 if (config.failOnError) {
                     throw TranslationException(

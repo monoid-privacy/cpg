@@ -37,8 +37,10 @@ import de.fraunhofer.aisec.cpg.passes.order.DependsOn
 
 @DependsOn(CallResolver::class)
 open class TypeResolver : Pass() {
-    protected val firstOrderTypes = mutableSetOf<Type>()
+    protected val firstOrderTypes = mutableMapOf<Type, Type>()
     protected val typeState = mutableMapOf<Type, MutableList<Type>>()
+    protected val typeStateKeyMap = mutableMapOf<Type, Type>()
+    protected val typeStateNameMap = hashMapOf<String, MutableList<Type>>()
 
     /**
      * Reduce the SecondOrderTypes to store only the unique SecondOrderTypes
@@ -73,7 +75,7 @@ open class TypeResolver : Pass() {
      */
     private fun obtainType(type: Type): Type {
         return if (type.root == type && type in typeState) {
-            typeState.keys.first { it == type }
+            typeStateKeyMap[type]!!
         } else {
             addType(type)
             type
@@ -89,6 +91,13 @@ open class TypeResolver : Pass() {
         if (type.root == type && type !in typeState) {
             // This is a rootType and is included in the map as key with empty references
             typeState[type] = mutableListOf()
+            typeStateKeyMap[type] = type
+
+            if (type.typeName !in typeStateNameMap) {
+                typeStateNameMap[type.typeName] = mutableListOf<Type>()
+            }
+
+            typeStateNameMap[type.typeName]!!.add(type)
             return
         }
 
@@ -107,17 +116,26 @@ open class TypeResolver : Pass() {
     protected fun removeDuplicateTypes() {
         val typeManager = TypeManager.getInstance()
         // Remove duplicate firstOrderTypes
-        firstOrderTypes.addAll(typeManager.firstOrderTypes)
+        for (t in typeManager.firstOrderTypes) {
+            firstOrderTypes[t] = t
+        }
 
         // Propagate new firstOrderTypes into secondOrderTypes
         val secondOrderTypes = typeManager.secondOrderTypes
         for (t in secondOrderTypes) {
-            t.root = firstOrderTypes.firstOrNull { it == t.root } ?: t.root
+            t.root = firstOrderTypes[t.root] ?: t.root
         }
 
         // Build Map from firstOrderTypes to list of secondOderTypes
-        for (t in firstOrderTypes) {
+        for ((_, t) in firstOrderTypes) {
             typeState[t] = mutableListOf()
+            typeStateKeyMap[t] = t
+
+            if (t.typeName !in typeStateNameMap) {
+                typeStateNameMap[t.typeName] = mutableListOf<Type>()
+            }
+
+            typeStateNameMap[t.typeName]!!.add(t)
         }
 
         // Remove duplicate secondOrderTypes
@@ -136,7 +154,7 @@ open class TypeResolver : Pass() {
     protected fun removeDuplicatesInFields(t: Type) {
         // Remove duplicates from fields
         if (t is FunctionPointerType) {
-            t.returnType = obtainType(t.returnType)
+            t.returnTypes = t.returnTypes.map(::obtainType)
             t.parameters = t.parameters.map(::obtainType)
         } else if (t is ObjectType) {
             t.generics = t.generics.map(::obtainType)
@@ -164,13 +182,13 @@ open class TypeResolver : Pass() {
     protected fun ensureUniqueSubTypes(subTypes: Collection<Type>): List<Type> {
         val uniqueTypes = mutableListOf<Type>()
         for (subType in subTypes) {
-            val trackedTypes =
+            val unique =
                 if (subType.isFirstOrderType) {
-                    typeState.keys
+                    typeStateKeyMap[subType]
                 } else {
-                    typeState[subType.root]!!
+                    typeState[subType.root]!!.firstOrNull { it == subType }
                 }
-            val unique = trackedTypes.firstOrNull { it == subType }
+
             // TODO Why do we only take the first one even if we don't add it?
             if (unique != null && unique !in uniqueTypes) uniqueTypes.add(unique)
         }
@@ -182,12 +200,18 @@ open class TypeResolver : Pass() {
         // globally unique
         if (node is HasType && node.type !is ParameterizedType) {
             val type = node.type
+
             val types =
                 if (type.isFirstOrderType) {
-                    typeState.keys
+                    typeStateKeyMap
                 } else {
-                    typeState.computeIfAbsent(type.root, ::mutableListOf)
+                    if (type.root !in typeState) {
+                        typeState[type.root] = mutableListOf<Type>(type.root)
+                    }
+
+                    typeState[type.root]?.map { it to it }?.toMap() ?: typeStateKeyMap
                 }
+
             updateType(node, types)
             node.updatePossibleSubtypes(ensureUniqueSubTypes(node.possibleSubTypes))
         }
@@ -201,20 +225,20 @@ open class TypeResolver : Pass() {
      */
     protected fun ensureUniqueSecondaryTypeEdge(node: Node) {
         if (node is SecondaryTypeEdge) {
-            node.updateType(typeState.keys)
+            node.updateType(typeStateKeyMap)
         } else if (node is HasType && node.type is SecondaryTypeEdge) {
-            (node.type as SecondaryTypeEdge).updateType(typeState.keys)
+            (node.type as SecondaryTypeEdge).updateType(typeStateKeyMap)
             for (possibleSubType in node.possibleSubTypes) {
                 if (possibleSubType is SecondaryTypeEdge) {
-                    possibleSubType.updateType(typeState.keys)
+                    possibleSubType.updateType(typeStateKeyMap)
                 }
             }
         }
     }
 
-    protected fun updateType(node: HasType, types: Collection<Type>) {
+    protected fun updateType(node: HasType, types: Map<Type, Type>) {
         // TODO: Why do we perform the update only for the first type?
-        val typeToUpdate = types.firstOrNull { it == node.type } ?: return
+        val typeToUpdate = types[node.type] ?: return
         node.updateType(typeToUpdate)
     }
 
@@ -226,9 +250,10 @@ open class TypeResolver : Pass() {
      */
     fun handle(node: Node) {
         if (node is RecordDeclaration) {
-            for (t in typeState.keys) {
-                if (t.typeName == node.name && t is ObjectType) {
-                    // The node is the class of the type t
+            val rtypes = typeStateNameMap[node.name] ?: emptyList()
+
+            for (t in rtypes) {
+                if (t is ObjectType) {
                     t.recordDeclaration = node
                 }
             }
@@ -238,6 +263,8 @@ open class TypeResolver : Pass() {
     override fun cleanup() {
         firstOrderTypes.clear()
         typeState.clear()
+        typeStateNameMap.clear()
+        typeStateKeyMap.clear()
         TypeManager.reset()
     }
 }

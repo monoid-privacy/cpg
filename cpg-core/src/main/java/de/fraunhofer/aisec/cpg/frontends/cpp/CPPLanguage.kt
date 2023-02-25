@@ -95,7 +95,8 @@ class CPPLanguage :
     override fun refineInvocationCandidatesFromRecord(
         recordDeclaration: RecordDeclaration,
         call: CallExpression,
-        namePattern: Pattern
+        namePattern: Pattern,
+        callResolver: CallResolver
     ): List<FunctionDeclaration> {
         val invocationCandidate =
             mutableListOf<FunctionDeclaration>(

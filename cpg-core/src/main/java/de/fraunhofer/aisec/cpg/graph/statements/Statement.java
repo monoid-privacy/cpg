@@ -31,6 +31,7 @@ import de.fraunhofer.aisec.cpg.graph.DeclarationHolder;
 import de.fraunhofer.aisec.cpg.graph.Node;
 import de.fraunhofer.aisec.cpg.graph.SubGraph;
 import de.fraunhofer.aisec.cpg.graph.declarations.Declaration;
+import de.fraunhofer.aisec.cpg.graph.declarations.FunctionDeclaration;
 import de.fraunhofer.aisec.cpg.graph.declarations.VariableDeclaration;
 import de.fraunhofer.aisec.cpg.graph.edge.PropertyEdge;
 import java.util.*;
@@ -45,10 +46,14 @@ public abstract class Statement extends Node implements DeclarationHolder {
    * VariableDeclaration} extracted from Block because for, while, if, switch can declare locals in
    * their condition or initializers
    */
-  // TODO: This is actually an AST node just for a subset of nodes, i.e. initializers in for-loops
+  // TODO: This is actually an AST node just for a subset of nodes, i.e.
+  // initializers in for-loops
   @Relationship(value = "LOCALS", direction = "OUTGOING")
   @SubGraph("AST")
   protected List<PropertyEdge<VariableDeclaration>> locals = new ArrayList<>();
+
+  @SubGraph("AST")
+  protected List<PropertyEdge<FunctionDeclaration>> anonDecls = new ArrayList<>();
 
   public List<VariableDeclaration> getLocals() {
     return unwrap(this.locals);
@@ -89,6 +94,10 @@ public abstract class Statement extends Node implements DeclarationHolder {
   public void addDeclaration(@NotNull Declaration declaration) {
     if (declaration instanceof VariableDeclaration) {
       addIfNotContains(this.locals, (VariableDeclaration) declaration);
+    }
+
+    if (declaration instanceof FunctionDeclaration) {
+      addIfNotContains(this.anonDecls, (FunctionDeclaration) declaration);
     }
   }
 

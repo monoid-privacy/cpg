@@ -25,6 +25,7 @@
  */
 package de.fraunhofer.aisec.cpg.graph.declarations
 
+import de.fraunhofer.aisec.cpg.frontends.HasNoMultipleFunctionNames
 import de.fraunhofer.aisec.cpg.graph.DeclarationHolder
 import de.fraunhofer.aisec.cpg.graph.SubGraph
 import de.fraunhofer.aisec.cpg.graph.TypeManager
@@ -35,12 +36,14 @@ import de.fraunhofer.aisec.cpg.graph.edge.PropertyEdgeDelegate
 import de.fraunhofer.aisec.cpg.graph.statements.CompoundStatement
 import de.fraunhofer.aisec.cpg.graph.statements.Statement
 import de.fraunhofer.aisec.cpg.graph.statements.expressions.Expression
+import de.fraunhofer.aisec.cpg.graph.types.MissingType
 import de.fraunhofer.aisec.cpg.graph.types.Type
 import de.fraunhofer.aisec.cpg.graph.types.UnknownType
 import java.util.*
 import java.util.stream.Collectors
 import org.apache.commons.lang3.builder.ToStringBuilder
 import org.neo4j.ogm.annotation.Relationship
+import org.slf4j.LoggerFactory
 
 /** Represents the declaration or definition of a function. */
 open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
@@ -121,11 +124,13 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
                 .stream()
                 .sorted(Comparator.comparingInt(ParamVariableDeclaration::argumentIndex))
                 .collect(Collectors.toList())
+
         return if (targetSignature.size < signature.size) {
             false
         } else {
             // signature is a collection of positional arguments, so the order must be preserved
             for (i in signature.indices) {
+
                 val declared = signature[i]
                 if (declared.isVariadic && targetSignature.size >= signature.size) {
                     // Everything that follows is collected by this param, so the signature is
@@ -137,10 +142,17 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
                     return true
                 }
                 val provided = targetSignature[i]
-                if (!TypeManager.getInstance().isSupertypeOf(declared.getType(), provided, this)) {
+                if (
+                    language !is HasNoMultipleFunctionNames &&
+                        !TypeManager.getInstance()
+                            .isSupertypeOf(declared.getType(), provided, this) &&
+                        declared.getType() !is UnknownType &&
+                        provided !is UnknownType
+                ) {
                     return false
                 }
             }
+
             // Longer target signatures are only allowed with varargs. If we reach this point, no
             // vararg has been encountered
             targetSignature.size == signature.size
@@ -200,7 +212,7 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
                 if (paramVariableDeclaration.default != null) {
                     signature.add(paramVariableDeclaration.getType())
                 } else {
-                    signature.add(UnknownType.getUnknownType(language))
+                    signature.add(MissingType.getMissingType(language))
                 }
             }
             return signature
@@ -270,5 +282,6 @@ open class FunctionDeclaration : ValueDeclaration(), DeclarationHolder {
         const val BRACKET_LEFT = "("
         const val COMMA = ","
         const val BRACKET_RIGHT = ")"
+        private val LOGGER = LoggerFactory.getLogger(FunctionDeclaration::class.java)
     }
 }

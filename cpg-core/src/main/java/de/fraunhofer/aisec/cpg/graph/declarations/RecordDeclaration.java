@@ -43,9 +43,12 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.neo4j.ogm.annotation.Relationship;
 import org.neo4j.ogm.annotation.Transient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Represents a C++ union/struct/class or Java class */
 public class RecordDeclaration extends Declaration implements DeclarationHolder, StatementHolder {
+  private static final Logger log = LoggerFactory.getLogger(RecordDeclaration.class);
 
   /** The kind, i.e. struct, class, union or enum. */
   private String kind;
@@ -54,9 +57,13 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   @SubGraph("AST")
   private List<PropertyEdge<FieldDeclaration>> fields = new ArrayList<>();
 
+  @Transient private Map<String, List<Integer>> fieldMap = new HashMap<>();
+
   @Relationship(value = "METHODS", direction = "OUTGOING")
   @SubGraph("AST")
   private List<PropertyEdge<MethodDeclaration>> methods = new ArrayList<>();
+
+  @Transient private Map<String, List<Integer>> methodMap = new HashMap<>();
 
   @Relationship(value = "CONSTRUCTORS", direction = "OUTGOING")
   @SubGraph("AST")
@@ -77,6 +84,8 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
 
   @Transient private List<Type> superClasses = new ArrayList<>();
   @Transient private List<Type> implementedInterfaces = new ArrayList<>();
+
+  private Set<Type> externalSubTypes = new HashSet<>();
 
   @org.neo4j.ogm.annotation.Relationship
   private Set<RecordDeclaration> superTypeDeclarations = new HashSet<>();
@@ -120,19 +129,101 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   }
 
   public void addField(FieldDeclaration fieldDeclaration) {
-    addIfNotContains(this.fields, fieldDeclaration);
+    if (this.fieldMap.containsKey(fieldDeclaration.getName())) {
+      for (Integer ix : this.fieldMap.get(fieldDeclaration.getName())) {
+        if (this.fields.get(ix).equals(fieldDeclaration)) {
+          return;
+        }
+      }
+    } else {
+      this.fieldMap.put(fieldDeclaration.getName(), new ArrayList<>());
+    }
+
+    addAndWrap(this.fields, fieldDeclaration, true);
+    this.fieldMap.get(fieldDeclaration.getName()).add(this.fields.size() - 1);
+    fieldDeclaration.setRecord(this);
   }
 
   public void removeField(FieldDeclaration fieldDeclaration) {
-    this.fields.removeIf(propertyEdge -> propertyEdge.getEnd().equals(fieldDeclaration));
+    if (!this.fieldMap.containsKey(fieldDeclaration.getName())) {
+      return;
+    }
+
+    List<Integer> inxes = this.fieldMap.get(fieldDeclaration.getName());
+    for (int i = 0; i < inxes.size(); i++) {
+      Integer ix = inxes.get(i);
+
+      if (this.fields.get(ix).getEnd().equals(fieldDeclaration)) {
+        inxes.remove(i);
+        i = i - 1;
+        this.fields.remove((int) ix);
+      }
+    }
+
+    if (fieldDeclaration.getRecord() == this) {
+      fieldDeclaration.setRecord(null);
+    }
   }
 
   public void setFields(List<FieldDeclaration> fields) {
+    List<FieldDeclaration> oldFields = unwrap(this.fields);
     this.fields = PropertyEdge.transformIntoOutgoingPropertyEdgeList(fields, this);
+
+    this.fieldMap.clear();
+
+    for (int i = 0; i < fields.size(); i++) {
+      FieldDeclaration f = fields.get(i);
+
+      if (!this.fieldMap.containsKey(f.getName())) {
+        this.fieldMap.put(f.getName(), new ArrayList());
+      }
+
+      this.fieldMap.get(f.getName()).add(i);
+    }
+
+    for (FieldDeclaration f : oldFields) {
+      if (f.getRecord() == this) {
+        f.setRecord(null);
+      }
+    }
+
+    for (FieldDeclaration f : unwrap(this.fields)) {
+      f.setRecord(this);
+    }
+  }
+
+  public List<FieldDeclaration> fieldsWithName(String name) {
+    List<FieldDeclaration> res = new ArrayList<>();
+    List<Integer> inxs = this.fieldMap.get(name);
+
+    if (inxs == null) {
+      return res;
+    }
+
+    for (Integer ix : inxs) {
+      res.add(getAndUnwrap(this.fields, ix, true));
+    }
+
+    return res;
   }
 
   public List<MethodDeclaration> getMethods() {
     return unwrap(this.methods);
+  }
+
+  public List<MethodDeclaration> methodsWithName(String name) {
+    List<MethodDeclaration> res = new ArrayList<>();
+    List<Integer> inxs = this.methodMap.get(name);
+
+    if (inxs == null) {
+      return res;
+    }
+
+    for (Integer ix : inxs) {
+      res.add(getAndUnwrap(this.methods, ix, true));
+    }
+
+    return res;
   }
 
   public List<PropertyEdge<MethodDeclaration>> getMethodsPropertyEdge() {
@@ -140,15 +231,51 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
   }
 
   public void addMethod(MethodDeclaration methodDeclaration) {
-    addIfNotContains(this.methods, methodDeclaration);
+    if (this.methodMap.containsKey(methodDeclaration.getName())) {
+      for (Integer ix : this.methodMap.get(methodDeclaration.getName())) {
+        if (this.methods.get(ix).getEnd().equals(methodDeclaration)) {
+          return;
+        }
+      }
+    } else {
+      this.methodMap.put(methodDeclaration.getName(), new ArrayList<>());
+    }
+
+    addAndWrap(this.methods, methodDeclaration, true);
+    this.methodMap.get(methodDeclaration.getName()).add(this.methods.size() - 1);
+    methodDeclaration.setRecordDeclaration(this);
   }
 
   public void removeMethod(MethodDeclaration methodDeclaration) {
-    this.methods.removeIf(propertyEdge -> propertyEdge.getEnd().equals(methodDeclaration));
+    if (!this.methodMap.containsKey(methodDeclaration.getName())) {
+      return;
+    }
+
+    List<Integer> inxes = this.methodMap.get(methodDeclaration.getName());
+    for (int i = 0; i < inxes.size(); i++) {
+      Integer ix = inxes.get(i);
+
+      if (this.methods.get(ix).getEnd().equals(methodDeclaration)) {
+        inxes.remove(i);
+        i = i - 1;
+        this.methods.remove((int) ix);
+      }
+    }
   }
 
   public void setMethods(List<MethodDeclaration> methods) {
     this.methods = PropertyEdge.transformIntoOutgoingPropertyEdgeList(methods, this);
+    this.methodMap.clear();
+
+    for (int i = 0; i < methods.size(); i++) {
+      MethodDeclaration m = methods.get(i);
+
+      if (!this.methodMap.containsKey(m.getName())) {
+        this.methodMap.put(m.getName(), new ArrayList());
+      }
+
+      this.methodMap.get(m.getName()).add(i);
+    }
   }
 
   public List<ConstructorDeclaration> getConstructors() {
@@ -249,6 +376,14 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
    */
   public void addSuperClass(Type superClass) {
     this.superClasses.add(superClass);
+  }
+
+  public Set<Type> getExternalSubTypes() {
+    return this.externalSubTypes;
+  }
+
+  public void addExternalSubType(Type subType) {
+    this.externalSubTypes.add(subType);
   }
 
   /**
@@ -362,9 +497,9 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
     if (declaration instanceof ConstructorDeclaration) {
       addIfNotContains(this.constructors, (ConstructorDeclaration) declaration);
     } else if (declaration instanceof MethodDeclaration) {
-      addIfNotContains(this.methods, (MethodDeclaration) declaration);
+      addMethod((MethodDeclaration) declaration);
     } else if (declaration instanceof FieldDeclaration) {
-      addIfNotContains(this.fields, (FieldDeclaration) declaration);
+      addField((FieldDeclaration) declaration);
     } else if (declaration instanceof RecordDeclaration) {
       addIfNotContains(this.records, (RecordDeclaration) declaration);
     } else if (declaration instanceof TemplateDeclaration) {
@@ -381,7 +516,8 @@ public class RecordDeclaration extends Declaration implements DeclarationHolder,
     var type = TypeParser.createFrom(this.getName(), getLanguage());
 
     if (type instanceof ObjectType) {
-      // as a shortcut, directly set the record declaration. This will be otherwise done
+      // as a shortcut, directly set the record declaration. This will be otherwise
+      // done
       // later by a pass, but for some frontends we need this immediately, so we set
       // this here.
       ((ObjectType) type).setRecordDeclaration(this);

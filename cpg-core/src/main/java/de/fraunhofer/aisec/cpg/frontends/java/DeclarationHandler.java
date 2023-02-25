@@ -255,7 +255,7 @@ public class DeclarationHandler
 
     // Todo adapt name using a new type of scope "Namespace/Package scope"
     // if (packageDeclaration != null) {
-    //  name = packageDeclaration.getNameAsString() + "." + name;
+    // name = packageDeclaration.getNameAsString() + "." + name;
     // }
     fqn = getAbsoluteName(fqn);
 
@@ -301,7 +301,9 @@ public class DeclarationHandler
     // TODO: 'this' identifier for multiple instances?
     for (BodyDeclaration<?> decl : classInterDecl.getMembers()) {
       if (decl instanceof com.github.javaparser.ast.body.FieldDeclaration) {
-        handle(decl); // will be added via the scopemanager
+        de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration fdecl =
+            (de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration)
+                handle(decl); // will be added via the scopemanager
       } else if (decl instanceof com.github.javaparser.ast.body.MethodDeclaration) {
         de.fraunhofer.aisec.cpg.graph.declarations.MethodDeclaration md =
             (de.fraunhofer.aisec.cpg.graph.declarations.MethodDeclaration) handle(decl);
@@ -339,9 +341,11 @@ public class DeclarationHandler
 
     frontend.getScopeManager().leaveScope(recordDeclaration);
 
-    // We need special handling if this is a so called "inner class". In this case we need to store
+    // We need special handling if this is a so called "inner class". In this case
+    // we need to store
     // a "this" reference to the outer class, so methods can use a "qualified this"
-    // (OuterClass.this.someFunction()). This is the same as the java compiler does. The reference
+    // (OuterClass.this.someFunction()). This is the same as the java compiler does.
+    // The reference
     // is stored as an implicit field.
     if (frontend.getScopeManager().getCurrentScope() instanceof RecordScope) {
       var scope = (RecordScope) frontend.getScopeManager().getCurrentScope();
@@ -369,7 +373,7 @@ public class DeclarationHandler
   public de.fraunhofer.aisec.cpg.graph.declarations.FieldDeclaration handleFieldDeclaration(
       com.github.javaparser.ast.body.FieldDeclaration fieldDecl) {
 
-    // TODO: can  field have more than one variable?
+    // TODO: can field have more than one variable?
     VariableDeclarator variable = fieldDecl.getVariable(0);
     List<String> modifiers =
         fieldDecl.getModifiers().stream()
@@ -460,13 +464,13 @@ public class DeclarationHandler
         this.frontend.getLocationFromRawNode(enumConstDecl));
   }
 
-  public Declaration /* TODO refine return type*/ handleAnnotationDeclaration(
+  public Declaration /* TODO refine return type */ handleAnnotationDeclaration(
       AnnotationDeclaration annotationConstDecl) {
     return new ProblemDeclaration(
         "AnnotationDeclaration not supported yet", ProblemNode.ProblemType.TRANSLATION);
   }
 
-  public Declaration /* TODO refine return type*/ handleAnnotationMemberDeclaration(
+  public Declaration /* TODO refine return type */ handleAnnotationMemberDeclaration(
       AnnotationMemberDeclaration annotationMemberDecl) {
     return new ProblemDeclaration(
         "AnnotationMemberDeclaration not supported yet", ProblemNode.ProblemType.TRANSLATION);

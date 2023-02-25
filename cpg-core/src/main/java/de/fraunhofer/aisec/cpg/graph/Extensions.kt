@@ -36,6 +36,10 @@ import de.fraunhofer.aisec.cpg.graph.statements.expressions.*
 import de.fraunhofer.aisec.cpg.helpers.SubgraphWalker
 import de.fraunhofer.aisec.cpg.passes.astParent
 
+fun Node?.filterChildren(predicate: ((Node) -> Boolean)?): List<Node> {
+    return this.allChildren(predicate)
+}
+
 /**
  * Flattens the AST beginning with this node and returns all nodes of type [T]. For convenience, an
  * optional predicate function [predicate] can be supplied, which will be applied via
@@ -258,11 +262,11 @@ fun Node.followNextDFGEdgesUntilHit(predicate: (Node) -> Boolean): FulfilledAndF
     // failedPaths: All the paths which do not satisfy "predicate"
     val failedPaths = mutableListOf<List<Node>>()
     // The list of paths where we're not done yet.
-    val worklist = mutableListOf<List<Node>>()
-    worklist.add(listOf(this)) // We start only with the "from" node (=this)
+    val worklist = mutableListOf<Pair<List<Node>, Set<String>>>()
+    worklist.add(Pair(listOf(this), emptySet())) // We start only with the "from" node (=this)
 
     while (worklist.isNotEmpty()) {
-        val currentPath = worklist.removeFirst()
+        val (currentPath, currentTags) = worklist.removeFirst()
         // The last node of the path is where we continue. We get all of its outgoing DFG edges and
         // follow them
         if (currentPath.last().nextDFG.isEmpty()) {
@@ -271,7 +275,22 @@ fun Node.followNextDFGEdgesUntilHit(predicate: (Node) -> Boolean): FulfilledAndF
             continue
         }
 
-        for (next in currentPath.last().nextDFG) {
+        for ((next, dfgTag) in currentPath.last().nextDFGMap) {
+            val nextTags = mutableSetOf<String>()
+            nextTags.addAll(currentTags)
+
+            if (dfgTag != null) {
+                if (dfgTag.direction == DFGTagDirection.ENTER) {
+                    nextTags.add(dfgTag.tag)
+                } else if (dfgTag.direction == DFGTagDirection.EXIT) {
+                    if (dfgTag.tag !in currentTags) {
+                        continue
+                    }
+
+                    nextTags.remove(dfgTag.tag)
+                }
+            }
+
             // Copy the path for each outgoing DFG edge and add the next node
             val nextPath = mutableListOf<Node>()
             nextPath.addAll(currentPath)
@@ -285,7 +304,7 @@ fun Node.followNextDFGEdgesUntilHit(predicate: (Node) -> Boolean): FulfilledAndF
             // The next node is new in the current path (i.e., there's no loop), so we add the path
             // with the next step to the worklist.
             if (!currentPath.contains(next)) {
-                worklist.add(nextPath)
+                worklist.add(Pair(nextPath, nextTags))
             }
         }
     }
@@ -343,6 +362,55 @@ fun Node.followNextEOGEdgesUntilHit(predicate: (Node) -> Boolean): FulfilledAndF
 
     return FulfilledAndFailedPaths(fulfilledPaths, failedPaths)
 }
+
+// fun Node.followNextEOGEdgesAndCallsUntilHit(predicate: (Node) -> Boolean):
+// FulfilledAndFailedPaths {
+//     // Looks complicated but at least it's not recursive...
+//     // result: List of paths (between from and to)
+//     val fulfilledPaths = mutableListOf<List<Node>>()
+//     // failedPaths: All the paths which do not satisfy "predicate"
+//     val failedPaths = mutableListOf<List<Node>>()
+//     // The list of paths where we're not done yet.
+//     val worklist = mutableListOf<List<Node>>()
+//     worklist.add(listOf(this)) // We start only with the "from" node (=this)
+
+//     while (worklist.isNotEmpty()) {
+//         val currentPath = worklist.removeFirst()
+//         val lastPath = currentPath.last()
+
+//         // The last node of the path is where we continue. We get all of its outgoing DFG edges
+// and
+//         // follow them
+//         if (lastPath.nextEOG.isEmpty() && (
+//             lastPath !is CallExpression ||
+//             lastPath.invokes.isEmpty()
+//         )) {
+//             // No further nodes in the path and the path criteria are not satisfied.
+//             failedPaths.add(currentPath)
+//             continue // Don't add this path anymore. The requirement is satisfied.
+//         }
+
+//         for (next in (currentPath.last().nextEOG + lastPath.invokes)) {
+//             // Copy the path for each outgoing DFG edge and add the next node
+//             val nextPath = mutableListOf<Node>()
+//             nextPath.addAll(currentPath)
+//             nextPath.add(next)
+//             if (predicate(next)) {
+//                 // We ended up in the node "to", so we're done. Add the path to the results.
+//                 fulfilledPaths.add(nextPath)
+//                 continue // Don't add this path anymore. The requirement is satisfied.
+//             }
+//             // The next node is new in the current path (i.e., there's no loop), so we add the
+// path
+//             // with the next step to the worklist.
+//             if (!currentPath.contains(next)) {
+//                 worklist.add(nextPath)
+//             }
+//         }
+//     }
+
+//     return FulfilledAndFailedPaths(fulfilledPaths, failedPaths)
+// }
 
 /**
  * Returns an instance of [FulfilledAndFailedPaths] where [FulfilledAndFailedPaths.fulfilled]
@@ -495,6 +563,16 @@ fun TranslationResult.callsByName(name: String): List<CallExpression> {
         (node as? CallExpression)?.invokes?.any { it.name == name } == true
     } as List<CallExpression>
 }
+
+val Node.containingFunction: FunctionDeclaration?
+    get() {
+        val followed = this.followPrevEOGEdgesUntilHit({ n -> n is FunctionDeclaration })
+        if (followed.fulfilled.isEmpty()) {
+            return null
+        }
+
+        return followed.fulfilled[0].last() as FunctionDeclaration
+    }
 
 /** Set of all functions which are called from this function */
 val FunctionDeclaration.callees: Set<FunctionDeclaration>

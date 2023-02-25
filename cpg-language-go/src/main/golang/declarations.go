@@ -128,12 +128,20 @@ func (p *ParamVariableDeclaration) SetName(s string) error {
 	return (*Node)(p).SetName(s)
 }
 
+func (p *ParamVariableDeclaration) SetVariadic(b bool) {
+	(*jnigi.ObjectRef)(p).CallMethod(env, "setVariadic", nil, NewBoolean(b))
+}
+
 func (f *FieldDeclaration) SetName(s string) error {
 	return (*Node)(f).SetName(s)
 }
 
 func (f *FieldDeclaration) SetType(t *Type) {
 	(*HasType)(f).SetType(t)
+}
+
+func (f *FieldDeclaration) SetIsEmbeddedField(b bool) error {
+	return (*jnigi.ObjectRef)(f).CallMethod(env, "setIsEmbeddedField", nil, NewBoolean(b))
 }
 
 func (v *VariableDeclaration) SetType(t *Type) {
@@ -184,9 +192,17 @@ func (r *RecordDeclaration) AddMethod(m *MethodDeclaration) (err error) {
 }
 
 func (r *RecordDeclaration) AddSuperClass(t *Type) (err error) {
-	(*jnigi.ObjectRef)(r).CallMethod(env, "addSuperClass", nil, t)
+	(*jnigi.ObjectRef)(r).CallMethod(env, "addSuperClass", nil, (*jnigi.ObjectRef)(t).Cast(TypeClass))
 
 	return
+}
+
+func (r *RecordDeclaration) AddExternalSubType(t *Type) (err error) {
+	return (*jnigi.ObjectRef)(r).CallMethod(env, "addExternalSubType", nil, (*jnigi.ObjectRef)(t).Cast(TypeClass))
+}
+
+func (r *RecordDeclaration) AddField(f *FieldDeclaration) {
+	(*jnigi.ObjectRef)(r).CallMethod(env, "addField", nil, (*jnigi.ObjectRef)(f))
 }
 
 func (r *RecordDeclaration) IsNil() bool {
